@@ -36,11 +36,34 @@ export default function App() {
   const [authLockedUntil, setAuthLockedUntil] = useState<number | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Navigation
+  // Business Owner Dynamic Context
+  const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
+  const [regStoreName, setRegStoreName] = useState('');
+  const [regPlatform, setRegPlatform] = useState('WooCommerce');
+  const [regUser, setRegUser] = useState('');
+  const [regPass, setRegPass] = useState('');
+  const [regSuccess, setRegSuccess] = useState<string | null>(null);
+
+  const [businessName, setBusinessName] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('roseansec_business_name')) || 'RoseanSec Central';
+  });
+  const [ecommercePlatform, setEcommercePlatform] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('roseansec_platform_type')) || 'WooCommerce';
+  });
+
+  // Load custom business metrics on login state change
+  useEffect(() => {
+    if (isAuthenticated) {
+      const name = localStorage.getItem('roseansec_business_name') || 'RoseanSec Central';
+      const plat = localStorage.getItem('roseansec_platform_type') || 'WooCommerce';
+      setBusinessName(name);
+      setEcommercePlatform(plat);
+    }
+  }, [isAuthenticated]);
+
+  // Navigation and State hooks
   const [activeTab, setActiveTab] = useState<'cybermap' | 'alerts' | 'logs' | 'azure' | 'gemini'>('cybermap');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // States
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -86,6 +109,7 @@ export default function App() {
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setRegSuccess(null);
 
     // Lock check
     if (authLockedUntil && Date.now() < authLockedUntil) {
@@ -94,12 +118,26 @@ export default function App() {
       return;
     }
 
-    // Credentials: username: "roseansec", password: "admin"
-    if (authUsername.trim().toLowerCase() === 'roseansec' && authPassword === 'admin') {
+    const trimmedUser = authUsername.trim().toLowerCase();
+    const storedUser = typeof window !== 'undefined' ? localStorage.getItem('roseansec_custom_user') : null;
+    const storedPass = typeof window !== 'undefined' ? localStorage.getItem('roseansec_custom_pass') : null;
+
+    const isDefault = trimmedUser === 'roseansec' && authPassword === 'admin';
+    const isCustom = storedUser && trimmedUser === storedUser.toLowerCase() && authPassword === storedPass;
+
+    if (isDefault || isCustom) {
       sessionStorage.setItem('roseansec_auth', 'true');
       setIsAuthenticated(true);
       setAuthPassword('');
       setAuthAttempts(0);
+      
+      if (isDefault) {
+        // Keep default store names if not customized
+        if (!localStorage.getItem('roseansec_business_name')) {
+          localStorage.setItem('roseansec_business_name', 'RoseanSec Central');
+          localStorage.setItem('roseansec_platform_type', 'Omnicanal');
+        }
+      }
     } else {
       const currentAttempts = authAttempts + 1;
       setAuthAttempts(currentAttempts);
@@ -113,6 +151,27 @@ export default function App() {
         setAuthError(`Identifiants invalides. Tentatives infructueuses : ${currentAttempts}/5.`);
       }
     }
+  };
+
+  const handleRegisterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setRegSuccess(null);
+
+    if (!regStoreName.trim() || !regUser.trim() || !regPass.trim()) {
+      setAuthError("Veuillez remplir tous les champs requis.");
+      return;
+    }
+
+    localStorage.setItem('roseansec_business_name', regStoreName.trim());
+    localStorage.setItem('roseansec_platform_type', regPlatform);
+    localStorage.setItem('roseansec_custom_user', regUser.trim().toLowerCase());
+    localStorage.setItem('roseansec_custom_pass', regPass);
+
+    setAuthUsername(regUser.trim());
+    setAuthPassword(regPass);
+    setIsRegisterMode(false);
+    setRegSuccess(`Votre boutique "${regStoreName.trim()}" (${regPlatform}) a été configurée avec succès ! Connectez-vous avec vos nouveaux identifiants.`);
   };
 
   const handleLogout = () => {
@@ -269,13 +328,14 @@ export default function App() {
     // Title Block
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('ROSEANSEC - AUDIT DE PROTECTION DU LOG CLOUD', 14, 16);
+    doc.setFontSize(16);
+    doc.text(`ROSEANSEC - AUDIT DE SECURITE DE LOGS`, 14, 14);
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text("Rapport d'incident et plan correctif de sécurité force brute (Banques & E-commerce)", 14, 23);
-    doc.text(`Édité le : ${new Date().toLocaleString('fr-FR')} | Système autonome`, 14, 28);
+    doc.setFontSize(9.5);
+    doc.text(`Commerce Sécurisé : ${businessName.toUpperCase()} | Plateforme : ${ecommercePlatform.toUpperCase()}`, 14, 21);
+    doc.text(`Incident de sécurité force brute & plan d'action de remédiation personnalisé`, 14, 27);
+    doc.text(`Édité le : ${new Date().toLocaleString('fr-FR')} | Système autonome`, 14, 32);
 
     // Decorative branding watermark logo
     doc.setFillColor(255, 182, 193); // Pink footer line
@@ -399,52 +459,159 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-white font-bold text-lg leading-none">ROSEANSEC v1.2</h1>
-              <p className="text-[10px] uppercase tracking-widest text-[#FFB6C1] mt-1.5 font-bold">PORTAIL SECTEUR SÉCURISÉ</p>
+              <p className="text-[9px] uppercase tracking-widest text-[#FFB6C1] mt-1.5 font-bold">
+                {isRegisterMode ? "ENREGISTREMENT COMMERCE" : "PORTAIL DE CYBER-DEFENSE"}
+              </p>
             </div>
           </div>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
-            <div>
-              <label className="block text-gray-400 font-mono tracking-wider text-[10px] uppercase mb-1.5">Identifiant Exploitation :</label>
-              <input 
-                type="text" 
-                value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)}
-                className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none select-all text-xs font-semibold"
-                placeholder="roseansec"
-                required
-              />
+          {regSuccess && (
+            <div className="p-3 bg-green-950/40 border border-green-500/30 text-green-300 text-[11px] rounded-lg mb-4 leading-relaxed font-semibold">
+              {regSuccess}
             </div>
+          )}
 
-            <div>
-              <label className="block text-gray-300 font-mono tracking-wider text-[10px] uppercase mb-1.5">Clef de Passe Admin :</label>
-              <div className="relative">
+          {!isRegisterMode ? (
+            <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-gray-400 font-mono tracking-wider text-[10px] uppercase mb-1.5 font-semibold">Identifiant Propriétaire :</label>
                 <input 
-                  type="password" 
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold"
-                  placeholder="••••••••"
+                  type="text" 
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none select-all text-xs font-semibold"
+                  placeholder="roseansec"
                   required
                 />
-                <Lock className="w-3.5 h-3.5 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
-            </div>
 
-            {authError && (
-              <div className="p-3 bg-red-950/30 border border-red-500/20 text-red-200 text-[11px] rounded-lg leading-relaxed font-semibold">
-                {authError}
+              <div>
+                <label className="block text-gray-300 font-mono tracking-wider text-[10px] uppercase mb-1.5 font-semibold">Mot de passe de sécurité :</label>
+                <div className="relative">
+                  <input 
+                    type="password" 
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <Lock className="w-3.5 h-3.5 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                </div>
               </div>
-            )}
 
-            <button 
-              type="submit"
-              className="w-full bg-[#800020] hover:bg-[#a60c32] text-white py-2.5 rounded-lg font-bold font-mono transition-all border border-white/5 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg uppercase tracking-wider text-[11px]"
-            >
-              <ShieldCheck className="w-4 h-4 text-[#FFB6C1]" />
-              DÉVERROUILLER L'ACCÈS
-            </button>
-          </form>
+              {authError && (
+                <div className="p-3 bg-red-950/30 border border-red-500/20 text-red-200 text-[11px] rounded-lg leading-relaxed font-semibold">
+                  {authError}
+                </div>
+              )}
+
+              <button 
+                type="submit"
+                className="w-full bg-[#800020] hover:bg-[#a60c32] text-white py-2.5 rounded-lg font-bold font-mono transition-all border border-white/5 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg uppercase tracking-wider text-[11px]"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#FFB6C1]" />
+                DÉVERROUILLER LE PORTAIL
+              </button>
+
+              <div className="border-t border-white/5 pt-4 text-center">
+                <p className="text-[10px] text-gray-400 mb-2">Vous êtes commerçant ? Adaptez le portail avec vos infos :</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(true);
+                    setAuthError(null);
+                    setRegSuccess(null);
+                  }}
+                  className="text-[#FFB6C1] hover:underline hover:text-white transition-colors text-[10px] font-bold cursor-pointer"
+                >
+                  [ CONFIGURER MON PROPRE COMMERCE ]
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRegisterSubmit} className="space-y-4 text-xs">
+              <p className="text-[10.5px] text-gray-400 leading-relaxed border-l-2 border-[#FFB6C1] pl-2 py-0.5">
+                Remplissez les informations de votre commerce pour générer une simulation de protection dédiée.
+              </p>
+
+              <div>
+                <label className="block text-gray-400 font-mono tracking-wider text-[10px] uppercase mb-1.5 font-semibold">Nom de votre Commerce :</label>
+                <input 
+                  type="text" 
+                  value={regStoreName}
+                  onChange={(e) => setRegStoreName(e.target.value)}
+                  className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold"
+                  placeholder="Ex: Marwa Cosmetics"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-400 font-mono tracking-wider text-[10px] uppercase mb-1.5 font-semibold">Solution E-Commerce de votre site :</label>
+                <select 
+                  value={regPlatform}
+                  onChange={(e) => setRegPlatform(e.target.value)}
+                  className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold cursor-pointer"
+                >
+                  <option value="WooCommerce">WooCommerce (WordPress)</option>
+                  <option value="Shopify">Shopify Plus Store</option>
+                  <option value="PrestaShop">PrestaShop CMS</option>
+                  <option value="Magento">Magento / Adobe Commerce</option>
+                  <option value="Custom REST API">Custom Node/PHP Backend Solution</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[#FFB6C1] font-mono tracking-wider text-[9px] uppercase mb-1 font-semibold">Identifiant choisi :</label>
+                  <input 
+                    type="text" 
+                    value={regUser}
+                    onChange={(e) => setRegUser(e.target.value)}
+                    className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold"
+                    placeholder="ex: marwa"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#FFB6C1] font-mono tracking-wider text-[9px] uppercase mb-1 font-semibold">Password désiré :</label>
+                  <input 
+                    type="password" 
+                    value={regPass}
+                    onChange={(e) => setRegPass(e.target.value)}
+                    className="w-full bg-[#1A1118] text-white p-2.5 rounded-lg border border-[#FFB6C1]/10 focus:border-[#FFB6C1]/40 outline-none text-xs font-semibold"
+                    placeholder="ex: pfe2026"
+                    required
+                  />
+                </div>
+              </div>
+
+              {authError && (
+                <div className="p-3 bg-red-950/30 border border-red-500/20 text-red-200 text-[11px] rounded-lg leading-relaxed font-semibold">
+                  {authError}
+                </div>
+              )}
+
+              <button 
+                type="submit"
+                className="w-full bg-[#800020] hover:bg-[#a60c32] text-white py-2.5 rounded-lg font-bold font-mono transition-all border border-white/5 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg uppercase tracking-wider text-[11px]"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#FFB6C1]" />
+                CREER LE PROFIL & REMPLIR
+              </button>
+
+              <div className="text-center pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsRegisterMode(false)}
+                  className="text-gray-400 hover:text-white transition-colors text-[10px] underline cursor-pointer"
+                >
+                  Retour au compte générique roseansec
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -481,12 +648,12 @@ export default function App() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-[#FFB6C1] font-bold text-lg lg:text-xl tracking-tight leading-none">RoseanSec</h1>
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-brand-rose/10 border border-brand-rose/20 text-[#FFB6C1] uppercase tracking-wider font-semibold">
-                Cloud native v1.2
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-brand-rose/10 border border-brand-rose/20 text-[#FFB6C1] uppercase tracking-wider font-semibold">
+                {businessName} ({ecommercePlatform})
               </span>
             </div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-white/50 font-semibold mt-0.5 hidden sm:block">
-              Cyber-Defense Platform
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#FFB6C1]/60 font-semibold mt-0.5 hidden sm:block">
+              PORTAIL ACTIF DE DEFENSE TRANSACTIOMNELLE
             </p>
           </div>
         </div>
