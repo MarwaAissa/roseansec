@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-brand-rose: #FFB6C1;
+  --color-brand-burgundy: #800020;
+  --color-brand-bg: #1A1118;
+  --color-brand-card: #251923;
+  --color-brand-border: rgba(255, 255, 255, 0.1);
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base resets & Leaflet marker animations */
+body {
+  background-color: var(--color-brand-bg);
+  color: #F3EAF0;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Pulsing red markers for attacks */
+@keyframes pulse-red {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.marker-pulse-red {
+  background: #EF4444;
+  border-radius: 50%;
+  border: 2px solid #FFC1C1;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  animation: pulse-red 2s infinite;
+}
+
+/* Pulsing blue markers for normal traffic */
+@keyframes pulse-blue {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.marker-pulse-blue {
+  background: #3B82F6;
+  border-radius: 50%;
+  border: 2px solid #9BF3FF;
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  animation: pulse-blue 2.5s infinite;
+}
+
+/* Custom Leaflet style overrides to fit the Cybermap dark theme */
+.leaflet-container {
+  background: #120a11 !important;
+  border-radius: 0.75rem;
+}
+
+/* Grayscale and dark mode OpenStreetMap tiles filter */
+.leaflet-tile-container img {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(120%) saturate(60%) !important;
+}
+
+/* Map controls style */
+.leaflet-bar a {
+  background-color: var(--color-brand-card) !important;
+  color: var(--color-brand-rose) !important;
+  border-bottom: 1px solid var(--color-brand-border) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--color-brand-card) !important;
+  color: #F3EAF0 !important;
+  border: 1px solid var(--color-brand-border);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--color-brand-card) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1118;
+}
+::-webkit-scrollbar-thumb {
+  background: #4D2D3E;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FFB6C1;
+}
