@@ -13,7 +13,8 @@ import {
   PlusCircle, 
   Trash2, 
   CheckCircle2,
-  Download
+  Download,
+  X
 } from 'lucide-react';
 
 interface LogViewerProps {
@@ -27,6 +28,8 @@ interface LogViewerProps {
   onUpdateConfig: (config: any) => Promise<any>;
   onImportLogs: (importedLogs: any[]) => Promise<any>;
   onGenerateLogs: (count: number) => Promise<any>;
+  onSimulateAttack?: () => Promise<any>;
+  simulating?: boolean;
 }
 
 export default function LogViewer({ 
@@ -35,7 +38,9 @@ export default function LogViewer({
   detectionConfig, 
   onUpdateConfig, 
   onImportLogs,
-  onGenerateLogs
+  onGenerateLogs,
+  onSimulateAttack,
+  simulating
 }: LogViewerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUCCESS' | 'FAILURE'>('ALL');
@@ -212,6 +217,32 @@ export default function LogViewer({
       {/* Left side: Parametric Adjustments and Import Widgets */}
       <div className="xl:col-span-4 flex flex-col gap-5">
         
+        {/* Quick Simulation Trigger for the Jury */}
+        {onSimulateAttack && (
+          <div className="bg-[#590117]/20 p-4 rounded-xl border border-rose-500/30 flex flex-col gap-3 font-mono">
+            <h4 className="font-display font-medium text-[#FFB6C1] text-xs uppercase tracking-wider flex items-center gap-2 pb-1.5 border-b border-rose-500/10">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+              SCÉNARIO DE DÉMO (SOUTENANCE)
+            </h4>
+            <p className="text-[11px] text-gray-300 leading-normal">
+              Simulez une intrusion de <strong>force brute</strong> instantanée (7 échecs rattachés à l'utilisateur <strong className="text-brand-rose">demo_user</strong> depuis la Russie).
+            </p>
+            <button
+              onClick={async () => {
+                setSearchTerm('demo_user'); // Set search filter instantly
+                await onSimulateAttack();
+              }}
+              disabled={simulating}
+              className="w-full bg-[#800020] hover:bg-[#a60029] text-white py-2 rounded-lg font-mono text-[11px] border border-rose-400/20 font-bold transition-all shadow-lg active:scale-95 cursor-pointer text-center"
+            >
+              {simulating ? 'Injection brute-force...' : '⚡ SIMULER L\'ATTAQUE'}
+            </button>
+          </div>
+        )}
+        
         {/* Detection Parameters Panel */}
         <div className="bg-brand-card p-4 rounded-xl border border-brand-border flex flex-col gap-4 font-mono select-none">
           <h4 className="font-display font-medium text-brand-rose text-xs uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-brand-border/40">
@@ -279,13 +310,15 @@ export default function LogViewer({
                   <span className="text-[10px] text-gray-500 italic">Aucune IP de confiance.</span>
                 ) : (
                   whitelist.map(ip => (
-                    <span key={ip} className="inline-flex items-center gap-1 bg-[#2D1623] hover:bg-[#3C1B2E] border border-[#FFB6C1]/20 px-2 py-0.5 rounded text-[10px] text-brand-rose">
+                    <span key={ip} className="inline-flex items-center gap-1.5 bg-brand-rose/10 hover:bg-brand-rose/15 border border-brand-rose/30 px-2.5 py-1 rounded-full text-[10px] text-brand-rose font-mono">
                       {ip}
                       <button 
+                        type="button"
                         onClick={() => handleRemoveWhitelistIp(ip)}
-                        className="hover:text-red-400 font-bold ml-1 text-[9px] cursor-pointer"
+                        className="hover:text-red-400 p-0.5 rounded-full hover:bg-brand-rose/20 transition-all cursor-pointer inline-flex items-center justify-center col-span-1"
+                        title="Retirer cette IP"
                       >
-                        ×
+                        <X className="w-2.5 h-2.5" />
                       </button>
                     </span>
                   ))

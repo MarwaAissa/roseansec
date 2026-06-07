@@ -6,14 +6,16 @@ interface AlertListProps {
   alerts: Alert[];
   onResolve: (id: string) => void;
   onSendEmail: (alertId: string, toEmail: string) => Promise<{ success: boolean; message: string; smtpLog?: string[] }>;
+  onSimulateAttack?: () => Promise<any>;
+  simulating?: boolean;
 }
 
-export default function AlertList({ alerts, onResolve, onSendEmail }: AlertListProps) {
+export default function AlertList({ alerts, onResolve, onSendEmail, onSimulateAttack, simulating }: AlertListProps) {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{ id: string; message: string; isError: boolean } | null>(null);
   const [smtpLogs, setSmtpLogs] = useState<string[] | null>(null);
-  const [recipientEmail, setRecipientEmail] = useState('admin.security@roseansec.com');
+  const [recipientEmail, setRecipientEmail] = useState('marwa.aissa06@gmail.com');
 
   const handleSendEmail = async (alertId: string) => {
     setEmailLoadingId(alertId);
@@ -81,10 +83,51 @@ export default function AlertList({ alerts, onResolve, onSendEmail }: AlertListP
           </span>
         </div>
 
+        {/* Action interactive de simulation d'attaque en direct */}
+        {onSimulateAttack && (
+          <div className="bg-[#800020]/10 border border-[#FFB6C1]/20 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-gray-300">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+              <span className="font-mono text-[11px] text-gray-300">
+                Démo Soutenance : Injecter une attaque brute-force brute en direct
+              </span>
+            </div>
+            <button
+              onClick={async () => {
+                const res = await onSimulateAttack();
+                if (res && res.success && res.alert) {
+                  setSelectedAlert(res.alert);
+                }
+              }}
+              disabled={simulating}
+              className="bg-brand-burgundy hover:bg-brand-rose px-3.5 py-1.5 rounded-lg text-white font-mono text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 shrink-0 border border-brand-rose/25 shadow-lg active:scale-95"
+            >
+              {simulating ? 'Injection...' : '⚠️ GENERER L\'ATTAQUE'}
+            </button>
+          </div>
+        )}
+
         <div className="space-y-3 max-h-[440px] overflow-y-auto pr-1">
           {alerts.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 font-mono text-sm border border-dashed border-brand-border rounded-lg">
-              Aucune anomalie détectée. Système sain.
+            <div className="text-center py-10 px-4 text-gray-500 font-mono text-xs border border-dashed border-brand-border rounded-lg flex flex-col items-center justify-center gap-4">
+              <span>Aucune anomalie active détectée. Le pare-feu est en veille passive.</span>
+              {onSimulateAttack && (
+                <button
+                  onClick={async () => {
+                    const res = await onSimulateAttack();
+                    if (res && res.success && res.alert) {
+                      setSelectedAlert(res.alert);
+                    }
+                  }}
+                  disabled={simulating}
+                  className="bg-brand-burgundy hover:bg-brand-rose px-4 py-2 rounded-lg text-white font-semibold transition-all cursor-pointer border border-[#FFB6C1]/20 shadow active:scale-95 text-[11px]"
+                >
+                  {simulating ? 'Simulation en cours...' : '⚡ Lancer le stress-test d\'attaque (Demo)'}
+                </button>
+              )}
             </div>
           ) : (
             alerts.map((alert) => (
@@ -104,7 +147,7 @@ export default function AlertList({ alerts, onResolve, onSendEmail }: AlertListP
                     {getSeverityBadge(alert.severity)}
                     {alert.resolved && (
                       <span className="flex items-center gap-1 text-[10px] text-green-400 font-mono bg-green-500/10 border border-green-500/20 px-1.5 py-0.2 rounded">
-                        REFAITE
+                        RÉSOLUE
                       </span>
                     )}
                   </div>
@@ -150,7 +193,7 @@ export default function AlertList({ alerts, onResolve, onSendEmail }: AlertListP
                 <span className="text-[10px] text-gray-400 font-mono">{selectedAlert.id}</span>
               </div>
               <h4 className="font-display font-medium text-lg text-white mt-1">
-                Fiche de Menace : Bruteforce
+                Fiche de Menace : {selectedAlert.severity === 'CRITICAL' ? 'Brute-force (Glissant)' : selectedAlert.severity === 'MEDIUM' ? 'Scan de Ports Suspect' : 'Anomalie Faible / Balayage'}
               </h4>
             </div>
 
@@ -196,7 +239,7 @@ export default function AlertList({ alerts, onResolve, onSendEmail }: AlertListP
                   value={recipientEmail}
                   onChange={(e) => setRecipientEmail(e.target.value)}
                   className="w-full bg-[#1A1118] text-xs text-white p-2.5 rounded-lg border border-brand-border focus:border-[#FFB6C1] outline-none"
-                  placeholder="admin.security@roseansec.com"
+                  placeholder="marwa.aissa06@gmail.com"
                 />
               </div>
 

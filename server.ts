@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { BlobServiceClient } from '@azure/storage-blob';
 import dotenv from 'dotenv';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -12,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -34,12 +35,24 @@ let detectionConfig = {
   whitelistedIps: ['192.168.1.10', '196.200.128.5'] // default trusted/exempt IPs
 };
 
+const SUSPECT_IPS = [
+  '185.220.101.1', '45.33.22.19', '203.0.113.5',
+  '85.25.43.111', '198.51.100.72', '177.55.22.10',
+  '113.161.12.8', '213.152.161.4', '184.72.10.88'
+];
+
 // Static countries dataset for attackers / normal actions
 const IP_METADATA: Record<string, { country: string; lat: number; lng: number }> = {
   // Suspects (Attacks)
   '185.220.101.1': { country: 'Russie', lat: 55.7558, lng: 37.6173 },
   '45.33.22.19': { country: 'Chine', lat: 39.9042, lng: 116.4074 },
   '203.0.113.5': { country: 'Ukraine', lat: 50.4501, lng: 30.5234 },
+  '85.25.43.111': { country: 'Allemagne', lat: 52.5200, lng: 13.4050 },
+  '198.51.100.72': { country: 'États-Unis', lat: 37.7749, lng: -122.4194 },
+  '177.55.22.10': { country: 'Brésil', lat: -23.5505, lng: -46.6333 },
+  '113.161.12.8': { country: 'Vietnam', lat: 10.8231, lng: 106.6297 },
+  '213.152.161.4': { country: 'Pays-Bas', lat: 52.3676, lng: 4.9041 },
+  '184.72.10.88': { country: 'Canada', lat: 45.4215, lng: -75.6972 },
   
   // Normal IPs
   '192.168.1.10': { country: 'Maroc (Réseau Local)', lat: 33.5731, lng: -7.5898 },
@@ -75,7 +88,7 @@ function generateLogsData(count: number) {
   const baseTime = new Date();
   
   const normalIps = ['192.168.1.10', '41.142.12.45', '105.66.55.23', '196.200.128.5', '82.120.12.33', '91.134.112.55'];
-  const suspectIps = ['185.220.101.1', '45.33.22.19', '203.0.113.5'];
+  const suspectIps = ['185.220.101.1', '45.33.22.19', '203.0.113.5', '85.25.43.111', '198.51.100.72', '177.55.22.10', '113.161.12.8', '213.152.161.4', '184.72.10.88'];
   const users = ['alice', 'bob', 'charlie', 'david', 'emma', 'fatima', 'yassine', 'admin', 'root'];
   
   // High concentration of threats at 2am-5am (peaks)
@@ -158,7 +171,7 @@ function runSlidingWindowDetection() {
   
   const windowMs = detectionConfig.windowMinutes * 60 * 1000;
   
-  // Sliding window: Look for >= maxAttempts failures in windowMinutes
+  // Sliding window: Look for >= maxAttempts stable failures in windowMinutes
   Object.entries(groups).forEach(([key, ipLogs]) => {
     const [username, ip] = key.split('_');
     const country = IP_METADATA[ip]?.country || 'Unknown';
@@ -178,33 +191,156 @@ function runSlidingWindowDetection() {
         return idx >= i && t >= startTime && t <= windowEnd;
       });
       
-      if (windowLogs.length >= detectionConfig.maxAttempts) {
-        // Trigger Critical Alert
+      let severity: 'CRITICAL' | 'MEDIUM' | 'LOW' = 'LOW';
+      let details = '';
+      let recommendations: string[] = [];
+      let triggerAlert = false;
+      const count = windowLogs.length;
+      
+      if (count >= detectionConfig.maxAttempts) {
+        severity = 'CRITICAL';
+        details = `Attaque de force brute détectée : ${count} tentatives de connexion échouées en moins de ${detectionConfig.windowMinutes} minutes pour l'utilisateur "${username}". Origine du trafic : ${country}`;
+        recommendations = [
+          `Bloquer l'adresse IP source (${ip}) au niveau du pare-feu applicatif (Azure WAF).`,
+          `Réinitialiser et forcer le changement de mot de passe pour l'utilisateur "${username}".`,
+          `Activer obligatoirement l'authentification multifacteur (MFA) sur ce compte.`,
+          `Surveiller toute activité suspecte post-attaque sur les APIs bancaires et de paiement.`
+        ];
+        triggerAlert = true;
+      } else if (count >= Math.ceil(detectionConfig.maxAttempts / 2)) {
+        severity = 'MEDIUM';
+        details = `Tentatives répétées et anormales d'accès : ${count} tentatives de connexion infructueuses détectées pour "${username}" depuis ${ip} (${country}).`;
+        recommendations = [
+          `Inspecter l'audit log d'accès de l'adresse IP ${ip} à la recherche de scans automatisés.`,
+          `Vérifier si le compte "${username}" est un compte administrateur ou un compte de service critique.`
+        ];
+        triggerAlert = true;
+      } else if (count >= 2) {
+        severity = 'LOW';
+        details = `Flux d'accès légèrement anormal : ${count} échecs de mot de passe successifs observés sur le compte de l'utilisateur "${username}" (${country}).`;
+        recommendations = [
+          `Aucune action d'urgence requise. Surveillance passive de l'IP source.`
+        ];
+        triggerAlert = true;
+      }
+      
+      if (triggerAlert) {
         const durationSec = Math.round((new Date(windowLogs[windowLogs.length - 1].timestamp).getTime() - startTime) / 1000);
         
-        // Check if an alert already exists for this block to avoid absolute duplication
+        // Check if an alert already exists for this block to avoid absolute duplication in the same window
         const alreadyAlerted = detectedAlerts.some(
-          alert => alert.username === username && alert.ip === ip && 
+          alert => alert.username === username && alert.ip === ip && alert.severity === severity &&
           Math.abs(new Date(alert.timestamp).getTime() - startTime) < windowMs
         );
         
         if (!alreadyAlerted) {
           detectedAlerts.push({
-            id: `alert-${Math.random().toString(36).substr(2, 9)}`,
+            id: `alert-${severity.toLowerCase()}-${Math.random().toString(36).substr(2, 5)}`,
             timestamp: startLog.timestamp,
-            severity: 'CRITICAL',
+            severity,
             ip,
             country,
             username,
-            attemptsCount: windowLogs.length,
+            attemptsCount: count,
             durationSeconds: durationSec === 0 ? 30 : durationSec,
             userAgent: startLog.userAgent,
-            details: `Attaque brute force détectée : ${windowLogs.length} tentatives de connexion échouées en moins de ${detectionConfig.windowMinutes} minutes pour l'utilisateur "${username}". Origine du trafic : ${country}`,
+            details,
+            recommendations,
+            resolved: false
+          });
+        }
+      }
+    }
+  });
+
+  // 1. Double Authentification / Voyage Impossible Detector (MEDIUM)
+  // Group all logs by username
+  const logsByUser: Record<string, any[]> = {};
+  generatedLogs.forEach(log => {
+    if (!logsByUser[log.username]) {
+      logsByUser[log.username] = [];
+    }
+    logsByUser[log.username].push(log);
+  });
+
+  Object.entries(logsByUser).forEach(([username, userLogs]) => {
+    // Sort chronologically
+    userLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    for (let i = 0; i < userLogs.length - 1; i++) {
+      const logA = userLogs[i];
+      const logB = userLogs[i+1];
+      
+      const timeDiff = Math.abs(new Date(logB.timestamp).getTime() - new Date(logA.timestamp).getTime());
+      const stateA = IP_METADATA[logA.ip];
+      const stateB = IP_METADATA[logB.ip];
+      
+      if (stateA && stateB && stateA.country !== stateB.country && timeDiff < 2 * 3600 * 1000) {
+        // Un Voyage Impossible / Conflit de Géo-IP
+        // Only trigger if one of them is outside Morocco or not matching
+        const isSuspicious = (stateA.country !== 'Maroc' && stateA.country !== 'Maroc (Réseau Local)') || 
+                             (stateB.country !== 'Maroc' && stateB.country !== 'Maroc (Réseau Local)');
+        if (isSuspicious) {
+          const alreadyAlerted = detectedAlerts.some(
+            alert => alert.username === username && 
+            alert.severity === 'MEDIUM' &&
+            Math.abs(new Date(alert.timestamp).getTime() - new Date(logB.timestamp).getTime()) < 4 * 3600 * 1000
+          );
+          
+          if (!alreadyAlerted) {
+            detectedAlerts.push({
+              id: `alert-medium-geo-${Math.random().toString(36).substr(2, 5)}`,
+              timestamp: logB.timestamp,
+              severity: 'MEDIUM',
+              ip: logB.ip,
+              country: stateB.country,
+              username,
+              attemptsCount: 2,
+              durationSeconds: Math.round(timeDiff / 1000),
+              userAgent: logB.userAgent,
+              details: `Conflit de géolocalisation critique : Un voyage impossible a été identifié pour l'utilisateur "${username}" entre le serveur d'accès (${stateA.country} - IP: ${logA.ip}) et l'adresse de session distante (${stateB.country} - IP: ${logB.ip}) en moins de 120 minutes.`,
+              recommendations: [
+                `Bloquer temporairement l'IP distante externe suspecte (${logB.ip}) sur Azure Application Gateway via Azure WAF.`,
+                `Forcer une déconnexion immédiate de toutes les sessions actives pour l'utilisateur "${username}".`,
+                `Exiger une double validation par SMS ou MFA lors de la prochaine connexion.`
+              ],
+              resolved: false
+            });
+            break; // only trigger 1 geo conflict per user inside simulation logs to avoid flooding
+          }
+        }
+      }
+    }
+  });
+
+  // 2. Accès Nocturne ou Anomalie Administrative (LOW)
+  generatedLogs.forEach(log => {
+    const isSpecialAcc = ['admin', 'root', 'administrator'].includes(log.username);
+    if (isSpecialAcc) {
+      const logHour = new Date(log.timestamp).getHours();
+      // Hour is between 1 AM and 5 AM (nocturnal window)
+      if (logHour >= 1 && logHour <= 5) {
+        const country = IP_METADATA[log.ip]?.country || 'Inconnu';
+        const alreadyAlerted = detectedAlerts.some(
+          alert => alert.username === log.username && 
+          alert.severity === 'LOW' &&
+          new Date(alert.timestamp).getHours() === logHour
+        );
+        if (!alreadyAlerted) {
+          detectedAlerts.push({
+            id: `alert-low-nocturnal-${Math.random().toString(36).substr(2, 5)}`,
+            timestamp: log.timestamp,
+            severity: 'LOW',
+            ip: log.ip,
+            country,
+            username: log.username,
+            attemptsCount: 1,
+            durationSeconds: 5,
+            userAgent: log.userAgent,
+            details: `Activité administrative nocturne suspecte : Accès authentifié sur le compte d'administration '${log.username}' à ${logHour}h du matin depuis l'adresse ${log.ip} (${country}).`,
             recommendations: [
-              `Bloquer l'adresse IP source (${ip}) au niveau du pare-feu applicatif (Azure WAF).`,
-              `Réinitialiser et forcer le changement de mot de passe pour l'utilisateur "${username}".`,
-              `Activer obligatoirement l'authentification multifacteur (MFA) sur ce compte.`,
-              `Surveiller toute activité suspecte post-attaque sur les APIs bancaires.`
+              `Demander à l'administrateur système concerné de valider son activité d'astreinte hors-horaires officiels.`,
+              `Examiner le journal complet des requêtes pour l'ID de session à cette heure.`
             ],
             resolved: false
           });
@@ -213,44 +349,24 @@ function runSlidingWindowDetection() {
     }
   });
 
-  // Also manually inject some medium/low warning alerts to show full visual component states in index list
-  // Medium alerts for general failures from unusual IPs (e.g., 2-4 attempts)
-  const suspiciousUsernames = ['administrator', 'backup', 'billing', 'db_user'];
-  suspiciousUsernames.forEach((user, i) => {
+  // Seeding a legacy low-severity solved alert to represent historic baseline state perfectly on load
+  const hasLowSeed = detectedAlerts.some(a => a.severity === 'LOW');
+  if (!hasLowSeed) {
     detectedAlerts.push({
-      id: `alert-med-${i}`,
-      timestamp: new Date(Date.now() - (i + 1) * 3600 * 1000).toISOString(),
-      severity: 'MEDIUM',
-      ip: '45.33.22.19',
-      country: 'Chine',
-      username: user,
-      attemptsCount: 3,
-      durationSeconds: 120,
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0.0.0',
-      details: `Tentatives répétées suspectes sur un compte de service sensible ("${user}").`,
-      recommendations: [
-        `Restreindre l'accès à ce compte de service uniquement aux plages IP internes.`,
-        `Inspecter l'audit log d'accès.`
-      ],
-      resolved: false
+      id: `alert-low-seed`,
+      timestamp: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
+      severity: 'LOW',
+      ip: '192.168.1.10',
+      country: 'Maroc (Réseau Local)',
+      username: 'fatima',
+      attemptsCount: 2,
+      durationSeconds: 12,
+      userAgent: 'Mozilla/5.0 Safari/604.1',
+      details: 'Léger pic de connexions infructueuses (erreur de saisie probable).',
+      recommendations: [`Aucune action immédiate requise. Clôturé automatiquement.`],
+      resolved: true
     });
-  });
-
-  // Low alert
-  detectedAlerts.push({
-    id: `alert-low-1`,
-    timestamp: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-    severity: 'LOW',
-    ip: '192.168.1.10',
-    country: 'Maroc (Réseau Local)',
-    username: 'fatima',
-    attemptsCount: 2,
-    durationSeconds: 15,
-    userAgent: 'Mozilla/5.0 Safari/604.1',
-    details: 'Léger pic de connexions infructueuses (erreur de saisie probable).',
-    recommendations: [`Aucune action immédiate. Suivi standard.`],
-    resolved: true
-  });
+  }
   
   // Sort alerts by severity & timestamp
   detectedAlerts.sort((a, b) => {
@@ -390,6 +506,53 @@ app.post('/api/logs/generate', (req, res) => {
   }
 });
 
+// Simulate a direct deterministic brute-force attack for demonstration
+app.post('/api/logs/simulate-bruteforce', (req, res) => {
+  try {
+    const attempts = Math.max(detectionConfig.maxAttempts + 2, 7);
+    const now = new Date();
+    const suspectIp = '185.220.101.1'; // Russie
+    const targetUser = 'demo_user';
+    const userAgent = 'Hydra/9.1 (Custom Brute-Force Demo Script)';
+    
+    const simulatedLogs: any[] = [];
+    for (let i = 0; i < attempts; i++) {
+      // Pack failures 12 seconds apart so they feel highly coordinated and fit perfectly in any sliding window
+      const logTime = new Date(now.getTime() - (attempts - 1 - i) * 12 * 1000); 
+      simulatedLogs.push({
+        id: `demo-failure-${i}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: logTime.toISOString(),
+        ip: suspectIp,
+        country: IP_METADATA[suspectIp]?.country || 'Russie',
+        username: targetUser,
+        status: 'FAILURE',
+        userAgent: userAgent
+      });
+    }
+
+    // Append to existing logs
+    generatedLogs = [...generatedLogs, ...simulatedLogs];
+    // Sort chronological
+    generatedLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    // Re-run detection immediately
+    runSlidingWindowDetection();
+
+    const newAlert = detectedAlerts.find(a => a.username === targetUser);
+
+    res.json({
+      success: true,
+      message: `Attaque brute-force sur "${targetUser}" injectée avec succès ! ${attempts} tentatives échouées de l'IP ${suspectIp} détectées en temps réel.`,
+      alertTriggered: !!newAlert,
+      alert: newAlert,
+      totalCount: generatedLogs.length,
+      alertsCount: detectedAlerts.length
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Alerts API
 app.get('/api/alerts', (req, res) => {
   res.json({
@@ -421,7 +584,7 @@ app.get('/api/stats', (req, res) => {
 
   generatedLogs.forEach(log => {
     const hour = new Date(log.timestamp).getHours();
-    const isAttacker = ['185.220.101.1', '45.33.22.19', '203.0.113.5'].includes(log.ip);
+    const isAttacker = SUSPECT_IPS.includes(log.ip);
     
     if (log.status === 'SUCCESS') {
       hourlyStats[hour].success++;
@@ -446,7 +609,7 @@ app.get('/api/stats', (req, res) => {
   generatedLogs.forEach(log => {
     const meta = IP_METADATA[log.ip];
     if (meta) {
-      const isMalicious = ['185.220.101.1', '45.33.22.19', '203.0.113.5'].includes(log.ip);
+      const isMalicious = SUSPECT_IPS.includes(log.ip);
       const key = log.ip;
       if (!locationStats[key]) {
         locationStats[key] = {
@@ -477,7 +640,7 @@ app.get('/api/stats', (req, res) => {
   // Top malicious IPs
   const malIps: Record<string, { country: string; count: number }> = {};
   generatedLogs.forEach(log => {
-    if (['185.220.101.1', '45.33.22.19', '203.0.113.5'].includes(log.ip) && log.status === 'FAILURE') {
+    if (SUSPECT_IPS.includes(log.ip) && log.status === 'FAILURE') {
       if (!malIps[log.ip]) {
         malIps[log.ip] = { country: IP_METADATA[log.ip]?.country || 'Unknown', count: 0 };
       }
@@ -491,9 +654,9 @@ app.get('/api/stats', (req, res) => {
   res.json({
     totalLogs: generatedLogs.length,
     legitimateCount: generatedLogs.filter(l => l.status === 'SUCCESS').length,
-    attackCount: generatedLogs.filter(l => ['185.220.101.1', '45.33.22.19', '203.0.113.5'].includes(l.ip)).length,
+    attackCount: generatedLogs.filter(l => SUSPECT_IPS.includes(l.ip)).length,
     criticalAlerts: detectedAlerts.filter(a => a.severity === 'CRITICAL' && !a.resolved).length,
-    activeIpsBlocked: 3, // Russia, China, Ukraine blocked
+    activeIpsBlocked: new Set(detectedAlerts.filter(a => !a.resolved).map(a => a.ip)).size,
     chartData,
     mapLocations: Object.values(locationStats),
     topTargetedAccounts,
@@ -625,7 +788,7 @@ app.get('/api/email/status', (req, res) => {
 });
 
 // Trigger an Email Alert manually or based on attack
-app.post('/api/email/send', (req, res) => {
+app.post('/api/email/send', async (req, res) => {
   const { alertId, toEmail } = req.body;
   const alert = detectedAlerts.find(a => a.id === alertId) || detectedAlerts[0];
 
@@ -633,7 +796,7 @@ app.post('/api/email/send', (req, res) => {
     return res.status(404).json({ success: false, message: 'Aucun alerte disponible pour envoyer un email.' });
   }
 
-  const targetEmail = toEmail || 'admin.security@roseansec.com';
+  const targetEmail = toEmail || 'marwa.aissa06@gmail.com';
 
   // Security feature: Avoid data exfiltration of critical system alerts to untrusted destinations
   const approvedDomains = ['roseansec.com', 'gmail.com', 'gov.ma', 'banque.ma'];
@@ -680,32 +843,71 @@ Généré automatiquement par RoseanSec Cloud Protection Engine.
 
   sentEmails.unshift(newEmail);
 
+  let realMailSent = false;
+  let smtpLog = [
+    `Connecting to SMTP Server smtp.gmail.com:587...`,
+    `220 smtp.gmail.com ESMTP hs14-20020a056a00060e00b...`,
+    `EHLO roseansec.azurewebsites.net`,
+    `250-8BITMIME`,
+    `250-STARTTLS`,
+    `STARTTLSCommand OK. Negotiating SSL/TLS...`,
+    `TLS negotiation successful. TLSv1.3 with AES-256-GCM`,
+    `AUTH LOGIN **** (authenticated with App-Password)`,
+    `S: 235 2.7.0 Authentication accepted`,
+    `MAIL FROM: <${newEmail.from}>`,
+    `250 2.1.0 OK`,
+    `RCPT TO: <${newEmail.to}>`,
+    `250 2.1.5 OK`,
+    `DATA`,
+    `354 Start mail input; end with <CR><LF>.<CR><LF>`,
+    `Sending mail content (size: ${Buffer.byteLength(messageBody)} bytes)`,
+    `.`,
+    `250 2.0.0 OK inqueue as 1713360411-gmail-smtp`,
+    `QUIT`,
+    `Connection closed successfully. Notification sent, SMTP Code 250.`
+  ];
+
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      });
+      
+      await transporter.sendMail({
+        from: `"RoseanSec SecOps Console" <${process.env.SMTP_USER}>`,
+        to: targetEmail,
+        subject: subject,
+        text: messageBody
+      });
+      
+      realMailSent = true;
+      smtpLog = [
+        `[REAL SMTP ACTIVE - GMAIL] Connecting to SMTP Server...`,
+        `AUTH LOGIN successful with user ${process.env.SMTP_USER}`,
+        `MAIL FROM: <${process.env.SMTP_USER}>`,
+        `RCPT TO: <${targetEmail}>`,
+        `Sending message contents (size: ${Buffer.byteLength(messageBody)} bytes)`,
+        `250 2.0.0 OK (E-mail envoyé et distribué RÉELLEMENT par SMTP avec succès dans la boîte!)`,
+        `Transporter connection closed cleanly.`
+      ];
+    } catch (err: any) {
+      console.error("Nodemailer real SMTP error, using visual fallback logs:", err);
+      smtpLog.unshift(`[REAL SMTP ERROR - Transport failed: ${err.message}]`);
+    }
+  }
+
   res.json({
     success: true,
-    message: `E-mail de notification de sécurité envoyé avec succès vers l'administrateur (${newEmail.to}).`,
+    realMailSent,
+    message: realMailSent 
+      ? `E-mail de notification de sécurité de l'administrateur RÉELLEMENT envoyé vers (${newEmail.to}) !`
+      : `E-mail de notification de sécurité envoyé avec succès vers l'administrateur (${newEmail.to}) [Mode Simulation].`,
     email: newEmail,
-    smtpLog: [
-      `Connecting to SMTP Server smtp.gmail.com:587...`,
-      `220 smtp.gmail.com ESMTP hs14-20020a056a00060e00b...`,
-      `EHLO roseansec.azurewebsites.net`,
-      `250-8BITMIME`,
-      `250-STARTTLS`,
-      `STARTTLSCommand OK. Negotiating SSL/TLS...`,
-      `TLS negotiation successful. TLSv1.3 with AES-256-GCM`,
-      `AUTH LOGIN **** (authenticated with App-Password)`,
-      `S: 235 2.7.0 Authentication accepted`,
-      `MAIL FROM: <${newEmail.from}>`,
-      `250 2.1.0 OK`,
-      `RCPT TO: <${newEmail.to}>`,
-      `250 2.1.5 OK`,
-      `DATA`,
-      `354 Start mail input; end with <CR><LF>.<CR><LF>`,
-      `Sending mail content (size: ${Buffer.byteLength(messageBody)} bytes)`,
-      `.`,
-      `250 2.0.0 OK inqueue as 1713360411-gmail-smtp`,
-      `QUIT`,
-      `Connection closed successfully. Notification sent, SMTP Code 250.`
-    ]
+    smtpLog
   });
 });
 
@@ -792,7 +994,33 @@ Formatte ta réponse en beau Markdown structuré et clair.
       analysis: response.text
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    console.warn("Real Gemini call failed (likely invalid/expired API key or network error) - resorting to offline simulated analyst.", error.message);
+    res.json({
+      success: true,
+      simulated: true,
+      analysis: `### Analyste Virtuel de Menace RoseanSec v1.2 (Analyse de Secours)
+
+⚠️ *Note : L'envoi de la requête à l'API Gemini a échoué (Détail: ${error.message}). Pour préserver la continuité de service de votre présentation PFE, RoseanSec a activé la brique d'analyse cognitive locale de secours.*
+
+**Constat de Situation :**
+Nous observons une attaque par dictionnaire initiée depuis l'IP **185.220.101.1** (basée en **Russie**), ciblant de manière acharnée l'utilisateur critique. Les pays de transit détectés sont l'Ukraine et la Chine, typique d'une structure de botnets de type brute-force distribué.
+
+**1. Analyse comportementale de l'acteur hostile :**
+- **Cible privilégiée :** Comptes de services de l'écosystème e-commerce.
+- **Type d'agression :** Brute-force hybride à haute fréquence (jusqu'à 30 tentatives par minute) repéré par notre algorithme à fenêtre glissante de 5 minutes.
+- **Traceur de signature :** Présence de User-Agents liés à des utilitaires de pénétration automatisés (\`Hydra\` ou \`Nmap script\`).
+
+**2. Évaluation de la conformité (Circulaire DN-11 / Loi 09-08) :**
+- **Risques réglementaires :** Non-respect de la traçabilité renforcée exigée par Bank Al-Maghrib en cas de compromission et d'incapacité d'exporter les registres.
+- **Urgence :** Sévère. L'attaque nécessite l'application immédiate de la politique d'isolation active de RoseanSec.
+
+**3. Plan de remédiation en Cloud Computing :**
+1. Ajouter une règle de blocage d'adresse IP d'origine sur l'Azure Network Security Group (NSG) ou Azure WAF.
+2. Forcer la journalisation immuable dans notre bucket Azure Blob Storage (couche native de Data Lake Gen2).
+3. Activer l'envoi de rapports à l'adresse de whitelist agréée.
+
+*Pour rétablir le raccordement direct avec les modèles d'IA en production, veuillez vous assurer d'avoir configuré une variable d'environnement GEMINI_API_KEY valide dans les réglages (Settings > Secrets).*`
+    });
   }
 });
 

@@ -14,7 +14,8 @@ import {
   X,
   Lock,
   Workflow,
-  HelpCircle
+  HelpCircle,
+  GraduationCap
 } from 'lucide-react';
 
 import WorldMap from './components/WorldMap';
@@ -23,6 +24,7 @@ import AlertList from './components/AlertList';
 import LogViewer from './components/LogViewer';
 import AzureConfig from './components/AzureConfig';
 import GeminiAudit from './components/GeminiAudit';
+import PfeSlides from './components/PfeSlides';
 import { LogEvent, Alert, AzureStorageStatus } from './types';
 
 export default function App() {
@@ -62,7 +64,7 @@ export default function App() {
   }, [isAuthenticated]);
 
   // Navigation and State hooks
-  const [activeTab, setActiveTab] = useState<'cybermap' | 'alerts' | 'logs' | 'azure' | 'gemini'>('cybermap');
+  const [activeTab, setActiveTab] = useState<'cybermap' | 'alerts' | 'logs' | 'azure' | 'gemini' | 'pfe_slides'>('cybermap');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -84,19 +86,35 @@ export default function App() {
         fetch('/api/detection/config')
       ]);
 
-      const dataLogs = await resLogs.json();
-      const dataAlerts = await resAlerts.json();
-      const dataStats = await resStats.json();
-      const dataAzure = await resAzure.json();
-      const dataConfig = await resConfig.json();
+      const getJson = async (res: Response) => {
+        if (!res.ok) {
+          throw new Error(`Serveur indisponible (HTTP ${res.status}).`);
+        }
+        const ct = res.headers.get('content-type');
+        if (!ct || !ct.includes('application/json')) {
+          throw new Error("La passerelle de sécurité est en cours de redémarrage. Actualisez la page.");
+        }
+        return res.json();
+      };
+
+      const dataLogs = await getJson(resLogs);
+      const dataAlerts = await getJson(resAlerts);
+      const dataStats = await getJson(resStats);
+      const dataAzure = await getJson(resAzure);
+      const dataConfig = await getJson(resConfig);
 
       setLogs(dataLogs.logs || []);
       setAlerts(dataAlerts.alerts || []);
       setStats(dataStats || null);
       setAzureStatus(dataAzure || null);
       setDetectionConfig(dataConfig || null);
-    } catch (err) {
-      console.error("Error loaded secure data endpoints from Express server: ", err);
+    } catch (err: any) {
+      console.warn("Backend Sync Notice (Expected during restart):", err.message);
+      // Setup a subtle, recovery instruction banner instead of throwing raw json exception
+      setLogsAlertState({
+        text: `ROSEANSEC SYNC : ${err.message || "Attente de connexion au serveur principal."}`,
+        success: false
+      });
     } finally {
       setLoading(false);
     }
@@ -205,6 +223,36 @@ export default function App() {
       return { success: false, message: err.message };
     } finally {
       setUpdatingLogs(false);
+    }
+  };
+
+  const [simulatingAttack, setSimulatingAttack] = useState(false);
+
+  const handleSimulateAttack = async () => {
+    setSimulatingAttack(true);
+    setLogsAlertState(null);
+    try {
+      const res = await fetch('/api/logs/simulate-bruteforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLogsAlertState({
+          text: `SIMULATION : ${data.message}`,
+          success: true
+        });
+        await fetchDashboardData();
+        return data;
+      } else {
+        setLogsAlertState({ text: "La simulation d'attaque brute-force a échoué.", success: false });
+        return { success: false, message: "La simulation a échoué." };
+      }
+    } catch (err: any) {
+      setLogsAlertState({ text: `Erreur : ${err.message}`, success: false });
+      return { success: false, message: err.message };
+    } finally {
+      setSimulatingAttack(false);
     }
   };
 
@@ -653,7 +701,7 @@ export default function App() {
               </span>
             </div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#FFB6C1]/60 font-semibold mt-0.5 hidden sm:block">
-              PORTAIL ACTIF DE DEFENSE TRANSACTIOMNELLE
+              PORTAIL ACTIF DE DEFENSE TRANSACTIONNELLE
             </p>
           </div>
         </div>
@@ -774,6 +822,7 @@ export default function App() {
             <Sparkles className="w-4 h-4 text-[#FFB6C1]" />
             AUDIT IA (GEMINI)
           </button>
+
         </div>
 
         {/* Mobile menu action bar */}
@@ -815,8 +864,10 @@ export default function App() {
                 <ShieldAlert className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">Critical Alerts</span>
-                <span className="text-2xl font-bold font-display text-red-500 block leading-tight">{stats.attackCount.toLocaleString()}</span>
+                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">Alertes Critiques</span>
+                <span className="text-2xl font-bold font-display text-red-500 block leading-tight">
+                  {alerts.filter(a => a.severity === 'CRITICAL').length}
+                </span>
               </div>
             </div>
 
@@ -825,8 +876,10 @@ export default function App() {
                 <Network className="w-5 h-5 text-orange-400" />
               </div>
               <div>
-                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">IPs Blacklisted</span>
-                <span className="text-2xl font-bold font-display text-orange-400 block leading-tight">3 Actives</span>
+                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">IPs Bloquées</span>
+                <span className="text-2xl font-bold font-display text-orange-400 block leading-tight">
+                  {stats?.activeIpsBlocked !== undefined ? `${stats.activeIpsBlocked} Actives` : `${new Set(alerts.filter(a => !a.resolved).map(a => a.ip)).size} Actives`}
+                </span>
               </div>
             </div>
 
@@ -835,8 +888,10 @@ export default function App() {
                 <Lock className="w-5 h-5 text-[#FFB6C1]" />
               </div>
               <div>
-                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">Targeted Users</span>
-                <span className="text-2xl font-bold font-display text-white block leading-tight">5 Users</span>
+                <span className="text-white/40 text-[10px] uppercase font-mono tracking-wider block leading-none mb-1">Comptes Ciblés</span>
+                <span className="text-2xl font-bold font-display text-white block leading-tight">
+                  {stats?.topTargetedAccounts ? `${stats.topTargetedAccounts.length} Comptes` : `${new Set(alerts.map(a => a.username)).size} Comptes`}
+                </span>
               </div>
             </div>
           </div>
@@ -888,6 +943,8 @@ export default function App() {
                 alerts={alerts} 
                 onResolve={handleResolveAlert}
                 onSendEmail={handleSendEmail}
+                onSimulateAttack={handleSimulateAttack}
+                simulating={simulatingAttack}
               />
             )}
 
@@ -899,6 +956,8 @@ export default function App() {
                 onUpdateConfig={handleUpdateConfig}
                 onImportLogs={handleImportLogs}
                 onGenerateLogs={handleGenerateLogs}
+                onSimulateAttack={handleSimulateAttack}
+                simulating={simulatingAttack}
               />
             )}
 
@@ -914,17 +973,38 @@ export default function App() {
             {activeTab === 'gemini' && (
               <GeminiAudit onAnalyze={handleAnalyzeGemini} />
             )}
+
+            {activeTab === 'pfe_slides' && (
+              <PfeSlides businessName={businessName} ecommercePlatform={ecommercePlatform} />
+            )}
           </div>
         )}
       </div>
 
       {/* Footer Bar */}
-      <footer className="h-auto md:h-12 bg-[#120a11] border-t border-white/5 px-6 lg:px-8 py-3 md:py-0 flex flex-col md:flex-row items-center justify-between text-[10px] text-white/40 uppercase tracking-widest font-mono gap-2 mt-auto">
-        <div>
-          <span>ROSEANSEC v1.2</span>
+      <footer className="h-auto md:h-12 bg-[#120a11] border-t border-white/5 px-6 lg:px-8 py-3 md:py-0 flex flex-col md:flex-row items-center justify-between text-[10px] uppercase tracking-widest font-mono gap-2 mt-auto text-gray-500">
+        <div className="flex items-center gap-4 flex-wrap">
+          <span>
+            ROSEANSEC v1.2{" "}
+            <button 
+              onClick={() => setActiveTab('pfe_slides')}
+              className="cursor-pointer ml-1 text-gray-600 hover:text-brand-rose transition-all focus:outline-none"
+              title="Support de soutenance PFE"
+            >
+              🎓
+            </button>
+          </span>
+          <span className="text-white/10 hidden md:inline">|</span>
+          <span className="text-white/30 lowercase">marwa.aissa06@gmail.com</span>
         </div>
-        <div className="text-center md:text-right text-white/30 truncate">
-          © {new Date().getFullYear()} ROSEANSEC
+        <div className="text-center md:text-right text-white/30 truncate flex items-center gap-2 flex-wrap justify-center md:justify-end">
+          <span>Auteur : Marwa AISSA</span>
+          <span className="text-white/10">|</span>
+          <span>Filière : Cloud Computing (PFE 2026)</span>
+          <span className="text-white/10">|</span>
+          <span>Cité des Métiers et des Compétences (CMC)</span>
+          <span className="text-white/10">|</span>
+          <span>© {new Date().getFullYear()} ROSEANSEC</span>
         </div>
       </footer>
     </div>

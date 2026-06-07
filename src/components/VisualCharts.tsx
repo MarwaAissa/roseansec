@@ -33,7 +33,7 @@ export default function VisualCharts({ data }: VisualChartsProps) {
       </div>
 
       <div className="w-full h-[280px]">
-        <ResponsiveContainer width="100%" h="100%">
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={sortedData}
             margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
