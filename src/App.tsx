@@ -121,6 +121,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    document.title = "RoseanSec";
     fetchDashboardData();
   }, []);
 
