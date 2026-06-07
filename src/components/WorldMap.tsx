@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ShieldCheck, Crosshair, RefreshCw, Zap, Eye, EyeOff, Radio, Terminal, Settings } from 'lucide-react';
+import { ShieldCheck, Crosshair, RefreshCw, Zap, Eye, EyeOff, Radio, Terminal, Award, Globe, Shield, Activity, ListOrdered, Server } from 'lucide-react';
 import L from 'leaflet';
 
 interface MapLocation {
@@ -15,7 +15,7 @@ interface WorldMapProps {
   locations: MapLocation[];
 }
 
-// Fixed coordinates map projection
+// Map projection helpers
 const getX = (lng: number) => ((lng + 180) / 360) * 800;
 const getY = (lat: number) => ((90 - lat) / 180) * 400;
 
@@ -31,19 +31,43 @@ const CONTINENT_PATHS = {
 };
 
 export default function WorldMap({ locations }: WorldMapProps) {
-  const [mapMode, setMapMode] = useState<'global' | 'morocco'>('morocco');
+  const [mapMode, setMapMode] = useState<'global' | 'morocco'>('global');
   const [hoveredNode, setHoveredNode] = useState<MapLocation | null>(null);
   const [selectedNode, setSelectedNode] = useState<MapLocation | null>(null);
   const [simulationActive, setSimulationActive] = useState<boolean>(true);
   const [radarActive, setRadarActive] = useState<boolean>(true);
   const [filterSeverity, setFilterSeverity] = useState<'ALL' | 'MALICIOUS' | 'LEGITIMATE'>('ALL');
   
-  // Custom interactive scanner line coordinates for HUD
+  // Tactical scanner details
   const [scannerCoord, setScannerCoord] = useState({ lat: 31.7917, lng: -7.0926 });
   const [trafficTicker, setTrafficTicker] = useState<string[]>([]);
   const tickerContainerRef = useRef<HTMLDivElement>(null);
-  
   const leafletMapRef = useRef<L.Map | null>(null);
+
+  // Real-time incremental attack simulation counters inspired by Norse & Kaspersky HUDs
+  const [attackerLeaderboard, setAttackerLeaderboard] = useState([
+    { country: 'Russie', code: 'RU', count: 18452, ip: '185.220.101.1', color: 'text-red-500' },
+    { country: 'Chine', code: 'CN', count: 14210, ip: '45.33.22.19', color: 'text-orange-500' },
+    { country: 'Ukraine', code: 'UA', count: 9112, ip: '203.0.113.5', color: 'text-rose-500' },
+    { country: 'Pays-Bas', code: 'NL', count: 5410, ip: '109.112.4.99', color: 'text-blue-400' },
+    { country: 'États-Unis', code: 'US', count: 4890, ip: '8.8.8.8', color: 'text-amber-400' }
+  ]);
+
+  const [targetPorts, setTargetPorts] = useState([
+    { port: '22', name: 'SSH (BruteForce)', count: 24501, pct: 48 },
+    { port: '80', name: 'HTTP (ModSec Check)', count: 12102, pct: 24 },
+    { port: '443', name: 'HTTPS (SSL Flood)', count: 8900, pct: 18 },
+    { port: '3389', name: 'RDP (Exploit)', count: 3201, pct: 6 },
+    { port: '8080', name: 'API Router (Bypass)', count: 1980, pct: 4 }
+  ]);
+
+  const [secIaActions, setSecIaActions] = useState({
+    nsgBlocks: 840,
+    azureWafBlocks: 1240,
+    smtpAlerts: 432,
+    geminiAudits: 284,
+    unjustifiedExfiltrations: 0
+  });
 
   // Initialize and update Leaflet Map focused on Moroccan economic hubs
   useEffect(() => {
@@ -57,7 +81,7 @@ export default function WorldMap({ locations }: WorldMapProps) {
 
     if (typeof window === 'undefined') return;
 
-    // Brief timeout to ensure DOM container with is fully painted
+    // Brief timeout to ensure DOM container is fully painted
     const timer = setTimeout(() => {
       const container = document.getElementById('leaflet-morocco-map');
       if (!container) return;
@@ -143,7 +167,7 @@ export default function WorldMap({ locations }: WorldMapProps) {
         },
         {
           name: 'Agadir Transaction Node',
-          desc: 'Réseau privé d\'administration et d\'archivage des transactions d\'achats',
+          desc: "Réseau privé d'administration et d'archivage des transactions d'achats",
           platform: 'Custom Laravel Portal',
           lat: 30.4278,
           lng: -9.5981,
@@ -223,18 +247,19 @@ export default function WorldMap({ locations }: WorldMapProps) {
   const moroccoX = getX(moroccoTarget.lng);
   const moroccoY = getY(moroccoTarget.lat);
 
-  // Combine real locations from database/state with high-quality pre-populated nodes to keep dashboard beautifully alive
+  // Combine parent inputs with Norse telemetry defaults coordinates list
   const activeLocations = useMemo(() => {
     const list = [...locations];
     
-    // If no locations are provided by parent, fallback to high-quality default set
+    // Injected famous threat points
     if (list.length === 0) {
       list.push(
-        { ip: '185.220.101.1', country: 'Russia (Moscow)', lat: 55.7558, lng: 37.6173, isMalicious: true, count: 840 },
-        { ip: '45.33.22.19', country: 'China (Beijing)', lat: 39.9042, lng: 116.4074, isMalicious: true, count: 312 },
+        { ip: '185.220.101.1', country: 'Russie (Moscou)', lat: 55.7558, lng: 37.6173, isMalicious: true, count: 840 },
+        { ip: '45.33.22.19', country: 'Chine (Pékin)', lat: 39.9042, lng: 116.4074, isMalicious: true, count: 312 },
         { ip: '203.0.113.5', country: 'Ukraine (Kyiv)', lat: 50.4501, lng: 30.5234, isMalicious: true, count: 250 },
+        { ip: '109.112.4.99', country: 'Pays-Bas (Amsterdam)', lat: 52.3676, lng: 4.9041, isMalicious: true, count: 182 },
         { ip: '195.154.122.99', country: 'France (Paris)', lat: 48.8566, lng: 2.3522, isMalicious: false, count: 5120 },
-        { ip: '8.8.8.8', country: 'United States (Washington)', lat: 38.9072, lng: -77.0369, isMalicious: false, count: 3410 }
+        { ip: '8.8.8.8', country: 'États-Unis (Washington)', lat: 38.9072, lng: -77.0369, isMalicious: false, count: 3410 }
       );
     }
 
@@ -248,15 +273,15 @@ export default function WorldMap({ locations }: WorldMapProps) {
     return list;
   }, [locations, filterSeverity]);
 
-  // Effect to drive dynamic threat log stream matching Kaspersky Cybermap ticker
+  // Effect to drive dynamic threat log stream matching Kaspersky/Norse real-time tickers and increase leaderboard counts
   useEffect(() => {
     const attackTypes = [
-      'Brute Force SSH Login Attempt',
-      'Port Scanning TCP/UDP Syn',
-      'Unauthorized RDP Connection',
-      'MFA Bypass Exhaustion Push',
-      'DDoS NTP Amplification Stream',
-      'Sec-IA Auto Blocked Payload'
+      'Brute Force SSH (Port 22)',
+      'Port Scanning TCP Syn (Port 80)',
+      'Unauthorized SSL (Port 443)',
+      'MFA Exhaustion Attempt',
+      'RDP Tunnel Attack (Port 3389)',
+      'Sec-IA API Security Filter Bypass'
     ];
 
     const generateLogTicker = () => {
@@ -264,21 +289,60 @@ export default function WorldMap({ locations }: WorldMapProps) {
       if (!randomNode) return;
       
       const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const action = randomNode.isMalicious 
-        ? `\u001b[31m[BLOQUÉ]\u001b[0m IP ${randomNode.ip} (${randomNode.country}) → ${attackTypes[Math.floor(Math.random() * attackTypes.length)]}`
-        : `\u001b[32m[PASS]\u001b[0m IP ${randomNode.ip} (${randomNode.country}) au tunnel VPN sécurisé`;
+      const currentAttack = attackTypes[Math.floor(Math.random() * attackTypes.length)];
+      
+      const formattedLog = randomNode.isMalicious 
+        ? `[BLOQUÉ] IP ${randomNode.ip} (${randomNode.country}) → Target morocco-gateway:${currentAttack}`
+        : `[PASS] IP ${randomNode.ip} (${randomNode.country}) au tunnel d'administration sécurisé IPsec`;
 
-      // Update scanner coordinates to represent actual dynamic tracking
+      // Update coordinate locator
       setScannerCoord({ lat: randomNode.lat, lng: randomNode.lng });
 
+      // Append to SIEM log
       setTrafficTicker(prev => {
-        const next = [...prev, `[${timeStr}] ${action}`];
+        const next = [...prev, `[${timeStr}] ${formattedLog}`];
         if (next.length > 25) next.shift();
         return next;
       });
+
+      // Increment live leaderboard metric at random to make dashboard dynamically "glowing" and active
+      if (randomNode.isMalicious) {
+        setAttackerLeaderboard(prev => {
+          return prev.map(item => {
+            if (randomNode.country.includes(item.country)) {
+              return { ...item, count: item.count + Math.floor(Math.random() * 5) + 1 };
+            }
+            return item;
+          }).sort((a, b) => b.count - a.count);
+        });
+
+        // Increment target port count
+        setTargetPorts(prev => {
+          const rngIndex = Math.floor(Math.random() * prev.length);
+          return prev.map((item, idx) => {
+            if (idx === rngIndex) {
+              const newCount = item.count + Math.floor(Math.random() * 4) + 1;
+              return { ...item, count: newCount };
+            }
+            return item;
+          });
+        });
+
+        // Increment automated actions metrics
+        setSecIaActions(prev => {
+          const rngNum = Math.random();
+          return {
+            ...prev,
+            nsgBlocks: prev.nsgBlocks + (rngNum > 0.6 ? 1 : 0),
+            azureWafBlocks: prev.azureWafBlocks + (rngNum > 0.4 ? 1 : 0),
+            smtpAlerts: prev.smtpAlerts + (rngNum > 0.8 ? 1 : 0),
+            geminiAudits: prev.geminiAudits + (rngNum > 0.9 ? 1 : 0)
+          };
+        });
+      }
     };
 
-    const interval = setInterval(generateLogTicker, simulationActive ? 1400 : 5000);
+    const interval = setInterval(generateLogTicker, simulationActive ? 1200 : 4000);
     return () => clearInterval(interval);
   }, [activeLocations, simulationActive]);
 
@@ -302,444 +366,537 @@ export default function WorldMap({ locations }: WorldMapProps) {
   };
 
   return (
-    <div className="relative w-full bg-[#1A1118] rounded-2xl border border-white/10 overflow-hidden flex flex-col shadow-2xl selection:bg-rose-900/40">
+    <div className="relative w-full bg-[#08020a] rounded-2xl border border-[#a855f7]/30 overflow-hidden flex flex-col shadow-2xl selection:bg-rose-900/40">
       
-      {/* Map Header Toolbar */}
-      <div className="px-5 py-3.5 bg-[#251923] border-b border-white/10 flex flex-col xl:flex-row gap-3 xl:items-center justify-between z-10">
+      {/* 1. Global Header: Authentic Norse Threat Map look */}
+      <div className="px-5 py-4 bg-[#14061a] border-b border-[#a855f7]/20 flex flex-col lg:flex-row gap-4 items-center justify-between z-10">
+        
+        {/* Left Badge with Blinking Active Pulse */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#800020]/40 border border-[#FFB6C1]/30 flex items-center justify-center relative">
-            <Radio className="w-4 h-4 text-[#FFB6C1]" />
+          <div className="w-9 h-9 rounded-lg bg-[#a855f7]/15 border border-[#a855f7]/40 flex items-center justify-center relative">
+            <Radio className="w-5 h-5 text-[#d8b4fe] animate-pulse" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
           </div>
           <div>
-            <h3 className="font-display font-semibold text-sm text-[#FFB6C1] tracking-wider uppercase flex items-center gap-2">
-              CARTOGRAPHIE DE CYBER-SÉCURITÉ
-            </h3>
-            <p className="text-[10px] text-white/50 font-mono tracking-wider mt-0.5">
-              Supervision de l'infrastructure transactionnelle e-commerce
+            <div className="flex items-center gap-2">
+              <h3 className="font-display font-semibold text-xs text-[#ebd5ff] tracking-widest uppercase">
+                ROSEANSEC CYBER SPECTRE™ ENGINE
+              </h3>
+              <span className="bg-[#a855f7]/20 text-[#ebd5ff] border border-[#a855f7]/40 px-1.5 py-0.2 rounded text-[8px] font-mono uppercase tracking-widest">
+                Kaspersky-Norse Real-Time Mode
+              </span>
+            </div>
+            <p className="text-[10px] text-purple-300/40 font-mono tracking-wider mt-0.5">
+              Supervision de l'infrastructure transactionnelle e-commerce Marocain
             </p>
           </div>
         </div>
 
-        {/* Quick controls panel */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Map Mode selector (Morocco vs Global) */}
-          <div className="bg-black/45 border border-brand-rose/25 p-1 rounded-lg flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setMapMode('morocco')}
-              className={`px-3 py-1 rounded text-[10px] font-mono font-bold transition-all uppercase cursor-pointer flex items-center gap-1 ${
-                mapMode === 'morocco' ? 'bg-brand-burgundy text-[#FFB6C1] font-bold border border-[#FFB6C1]/20' : 'text-white/40 hover:text-white'
-              }`}
-            >
-              🇲🇦 Zoom Maroc
-            </button>
+        {/* HUD control and toggles segment */}
+        <div className="flex flex-wrap items-center gap-3">
+          
+          {/* Quick HUD Presets */}
+          <div className="bg-[#1f0b2a] border border-[#a855f7]/20 p-1 rounded-lg flex items-center gap-1">
             <button
               onClick={() => setMapMode('global')}
               className={`px-3 py-1 rounded text-[10px] font-mono font-bold transition-all uppercase cursor-pointer flex items-center gap-1 ${
-                mapMode === 'global' ? 'bg-brand-burgundy text-[#FFB6C1] font-bold border border-[#FFB6C1]/20' : 'text-white/40 hover:text-white'
+                mapMode === 'global' ? 'bg-[#a855f7]/30 text-white font-bold border border-[#a855f7]/50 shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'text-purple-300/40 hover:text-purple-200'
               }`}
             >
-              🌐 Global HUD
+              🌐 Global HUD (Norse Concept)
+            </button>
+            <button
+              onClick={() => setMapMode('morocco')}
+              className={`px-3 py-1 rounded text-[10px] font-mono font-bold transition-all uppercase cursor-pointer flex items-center gap-1 ${
+                mapMode === 'morocco' ? 'bg-[#a855f7]/30 text-white font-bold border border-[#a855f7]/50 shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'text-purple-300/40 hover:text-purple-200'
+              }`}
+            >
+              🇲🇦 Zoom Maroc (Leaflet local)
             </button>
           </div>
 
-          {/* Severity selector (Only meaningful in Global SVG Map) */}
+          {/* Quick Filters */}
           {mapMode === 'global' && (
-            <div className="bg-black/30 border border-white/5 p-1 rounded-lg flex items-center gap-1">
+            <div className="bg-black/40 border border-white/5 p-1 rounded-lg flex items-center gap-1">
               <button
                 onClick={() => setFilterSeverity('ALL')}
-                className={`px-2.5 py-1 rounded text-[10px] font-mono transition-all uppercase cursor-pointer ${
-                  filterSeverity === 'ALL' ? 'bg-[#800020] text-white font-semibold' : 'text-white/40 hover:text-white'
+                className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase cursor-pointer ${
+                  filterSeverity === 'ALL' ? 'bg-purple-950 text-purple-200 border border-purple-500/30' : 'text-purple-300/30 hover:text-white'
                 }`}
               >
                 Tous
               </button>
               <button
                 onClick={() => setFilterSeverity('MALICIOUS')}
-                className={`px-2.5 py-1 rounded text-[10px] font-mono transition-all uppercase cursor-pointer ${
-                  filterSeverity === 'MALICIOUS' ? 'bg-red-900/60 text-red-300 font-semibold' : 'text-white/40 hover:text-white'
+                className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase cursor-pointer ${
+                  filterSeverity === 'MALICIOUS' ? 'bg-rose-950 text-rose-300 border border-rose-500/30' : 'text-purple-300/30 hover:text-white'
                 }`}
               >
-                Menaces
+                Agressions
               </button>
               <button
                 onClick={() => setFilterSeverity('LEGITIMATE')}
-                className={`px-2.5 py-1 rounded text-[10px] font-mono transition-all uppercase cursor-pointer ${
-                  filterSeverity === 'LEGITIMATE' ? 'bg-blue-900/60 text-blue-300 font-semibold' : 'text-white/40 hover:text-white'
+                className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase cursor-pointer ${
+                  filterSeverity === 'LEGITIMATE' ? 'bg-blue-950 text-blue-300 border border-blue-500/30' : 'text-purple-300/30 hover:text-white'
                 }`}
               >
-                VPN/Sains
+                Sains
               </button>
             </div>
           )}
 
-          {/* Interactive features togglers */}
+          {/* Map utilities */}
           {mapMode === 'global' && (
-            <>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setRadarActive(!radarActive)}
-                title="Toggle Radar Sweep Effect"
+                title="Activer/Désactiver le faisceau de balayage Radar"
                 className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                  radarActive ? 'bg-[#800020]/30 text-[#FFB6C1] border-[#FFB6C1]/30' : 'bg-transparent text-white/30 border-white/5 hover:text-white/60'
+                  radarActive ? 'bg-purple-950/40 text-purple-300 border-[#a855f7]/30 shadow-[0_0_6px_rgba(168,85,247,0.2)]' : 'bg-transparent text-purple-300/20 border-white/5'
                 }`}
               >
-                {radarActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                <Eye className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={() => setSimulationActive(!simulationActive)}
-                title="Toggle Real-time Attack Simulation Stream"
+                title="Activer/Désactiver le générateur de menaces en temps réel"
                 className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                  simulationActive ? 'bg-[#800020]/30 text-emerald-400 border-emerald-500/20' : 'bg-transparent text-white/30 border-white/5'
+                  simulationActive ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30 shadow-[0_0_6px_rgba(16,185,129,0.2)]' : 'bg-transparent text-purple-300/20 border-white/5'
                 }`}
               >
-                <Zap className="w-4 h-4" />
+                <Zap className="w-3.5 h-3.5" />
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Main Map Body Display */}
-      <div className="relative flex-1 w-full min-h-[380px] lg:min-h-[440px] bg-[#120a11] overflow-hidden flex flex-col">
+      {/* 2. Main Map Dashboard Area */}
+      <div className="relative w-full flex flex-col md:grid md:grid-cols-12 bg-[#0c0410] min-h-[420px] lg:min-h-[480px]">
         
         {mapMode === 'morocco' ? (
-          /* REAL LEAFLET INTERACTIVE MAP CENTERED ON MOROCCO */
-          <div className="w-full flex-1 min-h-[380px] lg:min-h-[440px] relative z-0">
-            <h4 className="absolute left-4 top-4 bg-brand-burgundy/80 backdrop-blur-sm px-2.5 py-1 rounded text-[9.5px] font-mono text-brand-rose border border-rose-500/20 uppercase tracking-widest z-[1000] font-bold select-none pointer-events-none shadow-md">
-              📡 Radar Régional Maroc (Leaflet interactif)
+          /* REGIONAL ZOOM VIEW */
+          <div className="col-span-12 w-full h-full min-h-[420px] lg:min-h-[480px] relative z-0">
+            <h4 className="absolute left-4 top-4 bg-[#14061a]/90 backdrop-blur-sm px-2.5 py-1 rounded text-[9.5px] font-mono text-[#d8b4fe] border border-[#a855f7]/30 uppercase tracking-widest z-[1000] font-bold select-none pointer-events-none shadow-md">
+              📡 Radar Régional Maroc (GIS Active Defense)
             </h4>
-            <div id="leaflet-morocco-map" className="w-full h-full min-h-[380px] lg:min-h-[440px] z-0"></div>
+            <div id="leaflet-morocco-map" className="w-full h-full min-h-[420px] lg:min-h-[480px] z-0"></div>
           </div>
         ) : (
-          /* SVG GLOBAL WEB INFRASTRUCTURE MAP DISPLAY */
+          /* GLOBAL GLOWING THREAT SPECTRE VIEW */
           <>
-            {/* Subtle background tech scanner details, lines & coordinate overlay */}
-            <div className="absolute inset-x-0 top-4 px-6 flex justify-between select-none pointer-events-none text-[9px] font-mono text-white/25">
-              <span>LAT TRACKER: {scannerCoord.lat.toFixed(4)}° N</span>
-              <span>LNG TRACKER: {scannerCoord.lng.toFixed(4)}° E</span>
-              <span className="hidden sm:inline">CYBERMAP RESOLUTION: 800x400 VECTOR ENGINE</span>
-            </div>
-
-            {/* Floating tactical coordinates HUD lock */}
-            <div className="absolute left-4 bottom-4 bg-black/50 border border-white/10 p-3 rounded-lg backdrop-blur-sm z-10 max-w-[200px] hidden md:block select-none font-mono text-[9px] space-y-1.5 text-white/70">
-              <div className="flex items-center gap-1 text-[#FFB6C1] font-semibold">
-                <Crosshair className="w-3.5 h-3.5" />
-                <span>CENTRAL HUD LOCK</span>
-              </div>
-              <p className="text-white/40 border-b border-white/5 pb-1 uppercase">Morocco Core Fireall</p>
-              <p>Node IP: <span className="text-white font-semibold">196.115.12.9</span></p>
-              <p>Region: <span className="text-white">Casablanca</span></p>
-              <p>Defense status: <span className="text-green-400 font-semibold uppercase animate-pulse">Actif Shield</span></p>
-            </div>
-
-            {/* Dynamic Hover Tooltip */}
-            {(hoveredNode || selectedNode) && (
-              <div 
-                className="absolute rounded-xl bg-[#251923]/95 border border-[#FFB6C1]/30 p-3.5 shadow-2xl z-20 max-w-[280px] backdrop-blur text-xs select-text font-mono transition-all duration-150"
-                style={{ 
-                  top: '20px', 
-                  right: '20px'
-                }}
-              >
-                <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
-                  <span className={`font-semibold tracking-wide uppercase flex items-center gap-1.5 ${
-                    (hoveredNode || selectedNode)?.isMalicious ? 'text-red-400' : 'text-blue-400'
-                  }`}>
-                    <span>●</span> {(hoveredNode || selectedNode)?.isMalicious ? 'INTRUSION DIRECTE' : 'Trafic de Confiance'}
-                  </span>
-                  <button 
-                    onClick={() => setSelectedNode(null)} 
-                    className="text-white/40 hover:text-white/100 text-[10px]"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="space-y-1 text-white/80">
-                  <p><strong className="text-white/40">IP Source:</strong> {(hoveredNode || selectedNode)?.ip}</p>
-                  <p><strong className="text-white/40">Pays d'Origine:</strong> {(hoveredNode || selectedNode)?.country}</p>
-                  <p><strong className="text-white/40">Requêtes bloquées:</strong> {(hoveredNode || selectedNode)?.count.toLocaleString()}</p>
-                  <p className="pt-1.5 mt-1 border-t border-white/5 flex items-center gap-1">
-                    <strong className="text-white/40">Action Sec-IA:</strong>
-                    {(hoveredNode || selectedNode)?.isMalicious ? (
-                      <span className="text-orange-400 font-semibold bg-orange-950/40 px-1.5 py-0.2 rounded border border-orange-500/20 text-[9px]">IP BLACKLISTÉE</span>
-                    ) : (
-                      <span className="text-green-400 font-semibold bg-green-950/40 px-1.5 py-0.2 rounded border border-green-500/20 text-[9px]">TUNNEL AUTORISÉ</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Vector SVG World Projection Stage Container */}
-            <div className="flex-1 w-full h-full flex items-center justify-center p-4">
-              <svg 
-                viewBox="0 0 800 400" 
-                className="w-full max-w-[800px] aspect-[2/1] bg-black/10 rounded-xl relative overflow-visible"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                
-                {/* 1. Definitions for Grid Patterns and Continent Matrix Mesh Masks */}
-                <defs>
-                  {/* World Dot Grid overall pattern */}
-                  <pattern id="dotPattern" width="16" height="16" patternUnits="userSpaceOnUse">
-                    <circle cx="2" cy="2" r="1.1" fill="#FFB6C1" opacity="0.06" />
-                  </pattern>
-
-                  {/* High-intensity glowing green/rose security grid representing landmass matrices */}
-                  <pattern id="landMeshPattern" width="7" height="7" patternUnits="userSpaceOnUse">
-                    <circle cx="2.5" cy="2.5" r="0.9" fill="#FFB6C1" opacity="0.25" />
-                  </pattern>
-
-                  {/* Combined continent mask */}
-                  <mask id="worldContinentsMask">
-                    <rect width="800" height="400" fill="black" />
-                    {Object.values(CONTINENT_PATHS).map((path, idx) => (
-                      <path key={idx} d={path} fill="white" />
-                    ))}
-                  </mask>
-
-                  {/* Parabolic Glow filters */}
-                  <filter id="cyberGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
-                </defs>
-
-            {/* 2. Main Ambient Graphic Layers */}
-            {/* Overall dot-grid background representing cyberspace matrix */}
-            <rect width="800" height="400" fill="url(#dotPattern)" className="pointer-events-none" />
-
-            {/* Radial cyber-rings representing threat monitoring scope centered around Morocco */}
-            <circle cx={moroccoX} cy={moroccoY} r="80" fill="none" stroke="red" strokeWidth="0.5" strokeDasharray="4,8" className="opacity-15" />
-            <circle cx={moroccoX} cy={moroccoY} r="160" fill="none" stroke="red" strokeWidth="0.4" strokeDasharray="2,6" className="opacity-10" />
-            <circle cx={moroccoX} cy={moroccoY} r="250" fill="none" stroke="red" strokeWidth="0.3" strokeDasharray="1,5" className="opacity-5" />
-
-            {/* 3. Render Solid Continents base for rich high contrast */}
-            <g className="opacity-95 pointer-events-none">
-              {Object.entries(CONTINENT_PATHS).map(([name, path]) => (
-                <path 
-                  key={name}
-                  d={path} 
-                  fill="#1B0C16" 
-                  stroke="rgba(255,182,193,0.12)" 
-                  strokeWidth="0.8"
-                />
-              ))}
-            </g>
-
-            {/* 4. Render Kaspersky-style Land Dotted Matrix Layer (Extremely beautiful outline projection!) */}
-            <rect 
-              width="800" 
-              height="400" 
-              fill="url(#landMeshPattern)" 
-              mask="url(#worldContinentsMask)" 
-              className="pointer-events-none"
-            />
-
-            {/* 5. Animated radar sweep line centering Morocco */}
-            {radarActive && (
-              <g className="radar-sweep-line pointer-events-none">
-                <line 
-                  x1={moroccoX} 
-                  y1={moroccoY} 
-                  x2={800} 
-                  y2={200} 
-                  stroke="rgba(255, 182, 193, 0.45)" 
-                  strokeWidth="1.2"
-                  filter="url(#cyberGlow)"
-                  className="origin-center"
-                />
-                <circle 
-                  cx={moroccoX} 
-                  cy={moroccoY} 
-                  r="140" 
-                  fill="url(#radarGradient)" 
-                  className="opacity-10"
-                />
-              </g>
-            )}
-
-            {/* 6. Draw glowing attack arcs cascaded to Casablanca target location */}
-            {activeLocations.map((loc, idx) => {
-              // Convert coord to flat X and Y
-              const locX = getX(loc.lng);
-              const locY = getY(loc.lat);
-
-              // Don't draw curves to Morocco on itself
-              if (loc.country.includes('Morocco')) return null;
-
-              const bezierD = getBezierCurve(locX, locY, moroccoX, moroccoY);
-
-              // Dynamic duration based on query count
-              const durationSeconds = Math.max(1.5, Math.min(4.5, 6 - (loc.count / 400)));
-
-              return (
-                <g key={`arc-${idx}`} className="transition-all duration-300">
-                  {/* Outer atmospheric glowing shadow arc */}
-                  <path 
-                    d={bezierD} 
-                    fill="none" 
-                    stroke={loc.isMalicious ? 'rgba(239, 68, 68, 0.12)' : 'rgba(59, 130, 246, 0.12)'} 
-                    strokeWidth="3.5" 
-                    className="pointer-events-none"
-                  />
-                  {/* Glowing thin connector core */}
-                  <path 
-                    d={bezierD} 
-                    fill="none" 
-                    stroke={loc.isMalicious ? 'rgba(239, 68, 68, 0.65)' : 'rgba(59, 130, 246, 0.55)'} 
-                    strokeWidth="0.95" 
-                    strokeDasharray="4,4"
-                    className="pointer-events-none"
-                  />
-
-                  {/* High-speed sliding photon packets riding down the parabolic cyber curve */}
-                  {simulationActive && (
-                    <circle r="3.2" fill={loc.isMalicious ? '#ef4444' : '#60a5fa'} className="shadow-2xl">
-                      <animateMotion 
-                        dur={`${durationSeconds}s`} 
-                        repeatCount="indefinite" 
-                        path={bezierD} 
-                      />
-                    </circle>
-                  )}
-                  {simulationActive && (
-                    <circle r="1.5" fill="#ffffff" opacity="0.9">
-                      <animateMotion 
-                        dur={`${durationSeconds}s`} 
-                        repeatCount="indefinite" 
-                        path={bezierD} 
-                      />
-                    </circle>
-                  )}
-                </g>
-              );
-            })}
-
-            {/* 7. Plotting main coordinate nodes & visual tooltips indicators */}
-            {/* Central Defensive Shield in Morocco */}
-            <g className="cursor-pointer">
-              {/* Outer pulsing defense rings */}
-              <circle cx={moroccoX} cy={moroccoY} r="15" fill="none" stroke="#FFB6C1" strokeWidth="1" className="animate-ping opacity-25" />
-              <circle cx={moroccoX} cy={moroccoY} r="7" fill="none" stroke="#FFB6C1" strokeWidth="1.5" className="animate-pulse" />
+            {/* Global Visual Display Section (Col-span 9) */}
+            <div className="col-span-12 lg:col-span-9 relative flex flex-col border-r border-[#a855f7]/10 p-4">
               
-              {/* Core Hub point */}
-              <circle 
-                cx={moroccoX} 
-                cy={moroccoY} 
-                r="4.5" 
-                fill="#ffffff" 
-                stroke="#FFB6C1" 
-                strokeWidth="2.5" 
-                filter="url(#cyberGlow)"
-                onMouseEnter={() => setHoveredNode(moroccoTarget)}
-                onMouseLeave={() => setHoveredNode(null)}
-                onClick={() => setSelectedNode(moroccoTarget)}
-              />
-            </g>
+              {/* Tactical system coordinate header */}
+              <div className="absolute inset-x-4 top-3 flex justify-between select-none pointer-events-none text-[8.5px] font-mono text-purple-300/30">
+                <span>COORD LOCK: {scannerCoord.lat.toFixed(4)}° N, {scannerCoord.lng.toFixed(4)}° E</span>
+                <span className="hidden sm:inline">MATRIX ENGINE: VIRTUAL VECTOR SPECTRE 800x400</span>
+                <span>STATUS: ACTIVE DEFENSE STABLE</span>
+              </div>
 
-            {/* Plot attacking / client terminals */}
-            {activeLocations.map((loc, idx) => {
-              const locX = getX(loc.lng);
-              const locY = getY(loc.lat);
+              {/* Central Shield Hologram Info Overlay */}
+              <div className="absolute left-4 bottom-4 bg-[#110517]/85 border border-[#a855f7]/30 p-2.5 rounded-lg backdrop-blur-md z-15 min-w-[210px] hidden sm:block select-none font-mono text-[9px] space-y-1.5 text-purple-200/80">
+                <div className="flex items-center gap-1.5 text-[#e5c7ff] font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#c084fc]" />
+                  <span>SHIELD HOLO-LOCK : ACTIVE</span>
+                </div>
+                <div className="space-y-1 border-t border-[#a855f7]/20 pt-1 text-purple-300/60 font-mono">
+                  <p>Passerelle : <span className="text-white font-semibold">196.115.12.9</span></p>
+                  <p>Région : <span className="text-white">Casablanca Hub</span></p>
+                  <p>Algorithme : <span className="text-emerald-400 font-semibold uppercase font-display select-none">FEST (Fenêtre O(1))</span></p>
+                  <p className="text-[8px] italic leading-tight text-purple-400/50">Surveillance active contre brute-force robotique</p>
+                </div>
+              </div>
 
-              if (loc.country.includes('Morocco')) return null;
-
-              const particleColor = loc.isMalicious ? '#ef4444' : '#3b82f6';
-              const ringColor = loc.isMalicious ? 'rgba(239,68,68,0.45)' : 'rgba(59,130,246,0.45)';
-
-              const isFocused = hoveredNode?.ip === loc.ip || selectedNode?.ip === loc.ip;
-
-              return (
-                <g 
-                  key={`node-${idx}`} 
-                  className="cursor-pointer"
-                  onMouseEnter={() => setHoveredNode(loc)}
-                  onMouseLeave={() => setHoveredNode(null)}
-                  onClick={() => setSelectedNode(loc)}
+              {/* Vector SVG World Projection Stage Container */}
+              <div className="flex-1 w-full h-full flex items-center justify-center py-6">
+                <svg 
+                  viewBox="0 0 800 400" 
+                  className="w-full aspect-[2/1] bg-[#07010a] rounded-xl relative overflow-visible"
+                  xmlns="http://www.w3.org/2000/svg"
                 >
-                  {/* Glowing alert aura */}
-                  <circle 
-                    cx={locX} 
-                    cy={locY} 
-                    r={isFocused ? 14 : 9} 
-                    fill="none" 
-                    stroke={ringColor} 
-                    strokeWidth={isFocused ? 2 : 1.2} 
-                    className="transition-all duration-200 animate-pulse" 
-                  />
-                  {/* Central Node Dot Core */}
-                  <circle 
-                    cx={locX} 
-                    cy={locY} 
-                    r={isFocused ? 5 : 3.5} 
-                    fill={particleColor} 
-                    stroke="#ffffff" 
-                    strokeWidth="1" 
-                    className="transition-all duration-200 shadow-md"
-                    filter={isFocused ? "url(#cyberGlow)" : ""}
+                  
+                  {/* Holographic grid and gradients markers definitions */}
+                  <defs>
+                    {/* Background cyberspace matrix pattern */}
+                    <pattern id="glowingDotPattern" width="16" height="16" patternUnits="userSpaceOnUse">
+                      <circle cx="2" cy="2" r="1.1" fill="#c084fc" opacity="0.05" />
+                    </pattern>
+
+                    {/* Cyber grids landmass matrix pattern representation */}
+                    <pattern id="cyanMeshPattern" width="8" height="8" patternUnits="userSpaceOnUse">
+                      <circle cx="2.5" cy="2.5" r="0.95" fill="#a855f7" opacity="0.18" />
+                    </pattern>
+
+                    {/* Combined continent mask */}
+                    <mask id="worldMatrixBounds">
+                      <rect width="800" height="400" fill="black" />
+                      {Object.values(CONTINENT_PATHS).map((path, idx) => (
+                        <path key={idx} d={path} fill="white" />
+                      ))}
+                    </mask>
+
+                    {/* Laser intense neon blur filters */}
+                    <filter id="neonAttackGlow" x="-30%" y="-30%" width="160%" height="160%">
+                      <feGaussianBlur stdDeviation="3.5" result="blur" />
+                      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                  </defs>
+
+                  {/* Matrix background layer */}
+                  <rect width="800" height="400" fill="url(#glowingDotPattern)" className="pointer-events-none" />
+
+                  {/* Fine tactical cyber rings around Casablanca Central Firewall node */}
+                  <circle cx={moroccoX} cy={moroccoY} r="70" fill="none" stroke="#a855f7" strokeWidth="0.45" strokeDasharray="3,6" className="opacity-15 animate-pulse" />
+                  <circle cx={moroccoX} cy={moroccoY} r="140" fill="none" stroke="#a855f7" strokeWidth="0.3" strokeDasharray="1,4" className="opacity-10" />
+                  <circle cx={moroccoX} cy={moroccoY} r="220" fill="none" stroke="#c084fc" strokeWidth="0.2" strokeDasharray="5,8" className="opacity-5" />
+
+                  {/* Draw fine coordinate grid lines (military/tactical airspace) */}
+                  <path d="M 0 100 L 800 100 M 0 200 L 800 200 M 0 300 L 800 300" stroke="#a855f7" strokeWidth="0.25" strokeDasharray="4,15" className="opacity-10 pointer-events-none" />
+                  <path d="M 200 0 L 200 400 M 400 0 L 400 400 M 600 0 L 600 400" stroke="#a855f7" strokeWidth="0.25" strokeDasharray="4,15" className="opacity-10 pointer-events-none" />
+
+                  {/* Solid high-fidelity continental backgrounds */}
+                  <g className="opacity-95 pointer-events-none">
+                    {Object.entries(CONTINENT_PATHS).map(([name, path]) => (
+                      <path 
+                        key={name}
+                        d={path} 
+                        fill="#120619" 
+                        stroke="rgba(168,85,247,0.18)" 
+                        strokeWidth="0.85"
+                      />
+                    ))}
+                  </g>
+
+                  {/* Landmass Glowing Dotted matrix mesh layer (True cyber threat design style) */}
+                  <rect 
+                    width="800" 
+                    height="400" 
+                    fill="url(#cyanMeshPattern)" 
+                    mask="url(#worldMatrixBounds)" 
+                    className="pointer-events-none"
                   />
 
-                  {/* Elegant coordinate indicator line overlay */}
-                  {isFocused && (
-                    <g className="opacity-60 pointer-events-none">
-                      <line x1={locX} y1={locY} x2={locX} y2={locY + 25} stroke={particleColor} strokeWidth="0.8" />
-                      <circle cx={locX} cy={locY + 25} r="2" fill={particleColor} />
+                  {/* Dynamic Sweep Radar Laser Line */}
+                  {radarActive && (
+                    <g className="radar-laser-sweep pointer-events-none">
+                      <line 
+                        x1={moroccoX} 
+                        y1={moroccoY} 
+                        x2={800} 
+                        y2={150} 
+                        stroke="rgba(192, 132, 252, 0.4)" 
+                        strokeWidth="1.1"
+                        filter="url(#neonAttackGlow)"
+                        className="origin-center"
+                      />
                     </g>
                   )}
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      </>
-    )}
 
-        {/* Dynamic sub-map cyber ticker terminal log panel */}
-        <div className="h-28 bg-[#251923]/60 border-t border-white/5 p-3 font-mono flex flex-col justify-end">
-          <div className="flex items-center gap-1.5 text-[9px] text-[#FFB6C1]/50 mb-1.5 font-bold uppercase tracking-wider select-none">
-            <Terminal className="w-3.5 h-3.5" />
-            <span>FLUX DE TRAFIC ACTIF</span>
-            <span className="ml-auto flex items-center gap-1 text-[8px] bg-red-950/40 text-[#FFB6C1] px-1.5 py-0.2 rounded border border-red-500/10">
-              {activeLocations.length} sources surveillées
-            </span>
-          </div>
+                  {/* PARABOLIC ATTACK LASER TRAJECTORIES (From simulated origins to Morocco) */}
+                  {activeLocations.map((loc, idx) => {
+                    const locX = getX(loc.lng);
+                    const locY = getY(loc.lat);
 
-          <div 
-            ref={tickerContainerRef}
-            className="flex-1 overflow-y-auto text-[9px] text-zinc-300 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 pr-2 leading-relaxed"
-          >
-            {trafficTicker.length === 0 ? (
-              <p className="text-zinc-500 select-none">{"[SYSTEM]"} Initialisation du flux cybermap, attente de paquets...</p>
-            ) : (
-              trafficTicker.map((tick, i) => {
-                // Quick terminal color formatting codes
-                const renderedText = tick
-                  .replace('\u001b[31m[BLOQUÉ]\u001b[0m', '[-] BLOQUÉ')
-                  .replace('\u001b[32m[PASS]\u001b[0m', '[+] ACCÈS');
+                    // Skip drawing arcs from Morocco to itself
+                    if (loc.country.includes('Maroc') || loc.country.includes('Morocco')) return null;
 
-                return (
-                  <p key={i} className="font-mono text-[9px] border-l border-white/5 pl-2 select-text">
-                    <span className="text-[#FFB6C1]/30 mr-1.5">{"$"}</span>
-                    {renderedText}
-                  </p>
-                );
-              })
-            )}
-          </div>
-        </div>
+                    const bezierPathCode = getBezierCurve(locX, locY, moroccoX, moroccoY);
 
+                    // Slower speed for harmless/safe connections, mega high speed for malicious packets
+                    const speed = loc.isMalicious ? Math.max(1.2, 5 - (loc.count / 400)) : 4.5;
+
+                    return (
+                      <g key={`cyber-laser-${idx}`} className="transition-all duration-300">
+                        {/* Core vector arc path trailing glow shadow */}
+                        <path 
+                          d={bezierPathCode} 
+                          fill="none" 
+                          stroke={loc.isMalicious ? 'rgba(239, 68, 68, 0.16)' : 'rgba(59, 130, 246, 0.15)'} 
+                          strokeWidth="3.2" 
+                          className="pointer-events-none"
+                        />
+                        {/* Thin vector core line */}
+                        <path 
+                          d={bezierPathCode} 
+                          fill="none" 
+                          stroke={loc.isMalicious ? 'rgba(244, 63, 94, 0.65)' : 'rgba(6, 182, 212, 0.5)'} 
+                          strokeWidth="0.9" 
+                          strokeDasharray="5,6"
+                          className="pointer-events-none"
+                        />
+
+                        {/* Animated sliding digital packet particles (Kaspersky style) */}
+                        {simulationActive && (
+                          <>
+                            {/* Outer bright pulsing neon envelope */}
+                            <circle r="3.5" fill={loc.isMalicious ? '#f43f5e' : '#06b6d4'} className="shadow-2xl">
+                              <animateMotion 
+                                dur={`${speed}s`} 
+                                repeatCount="indefinite" 
+                                path={bezierPathCode} 
+                              />
+                            </circle>
+                            {/* Inner white high energy spark */}
+                            <circle r="1.3" fill="#ffffff">
+                              <animateMotion 
+                                dur={`${speed}s`} 
+                                repeatCount="indefinite" 
+                                path={bezierPathCode} 
+                              />
+                            </circle>
+                          </>
+                        )}
+                      </g>
+                    );
+                  })}
+
+                  {/* MOROCCO DEFENSIVE CORE CENTRE SHIELD INDICATOR */}
+                  <g className="cursor-pointer">
+                    <circle cx={moroccoX} cy={moroccoY} r="18" fill="none" stroke="#22c55e" strokeWidth="0.8" className="animate-ping opacity-25" />
+                    <circle cx={moroccoX} cy={moroccoY} r="9" fill="none" stroke="#22c55e" strokeWidth="1.5" className="animate-pulse" />
+                    <circle 
+                      cx={moroccoX} 
+                      cy={moroccoY} 
+                      r="4.5" 
+                      fill="#ffffff" 
+                      stroke="#22c55e" 
+                      strokeWidth="2" 
+                      filter="url(#neonAttackGlow)"
+                      onMouseEnter={() => setHoveredNode(moroccoTarget)}
+                      onMouseLeave={() => setHoveredNode(null)}
+                      onClick={() => setSelectedNode(moroccoTarget)}
+                    />
+                  </g>
+
+                  {/* ATTACKING SOURCE COORDINATE TERMINALS */}
+                  {activeLocations.map((loc, idx) => {
+                    const locX = getX(loc.lng);
+                    const locY = getY(loc.lat);
+
+                    if (loc.country.includes('Maroc') || loc.country.includes('Morocco')) return null;
+
+                    const pointColor = loc.isMalicious ? '#f43f5e' : '#06b6d4';
+                    const haloCircleColor = loc.isMalicious ? 'rgba(244,63,94,0.45)' : 'rgba(6,182,212,0.45)';
+                    const isTargeted = hoveredNode?.ip === loc.ip || selectedNode?.ip === loc.ip;
+
+                    return (
+                      <g 
+                        key={`vector-node-${idx}`} 
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredNode(loc)}
+                        onMouseLeave={() => setHoveredNode(null)}
+                        onClick={() => setSelectedNode(loc)}
+                      >
+                        {/* Dynamic threat area glow */}
+                        <circle 
+                          cx={locX} 
+                          cy={locY} 
+                          r={isTargeted ? 13 : 8.5} 
+                          fill="none" 
+                          stroke={haloCircleColor} 
+                          strokeWidth={isTargeted ? 2 : 1.1} 
+                          className="animate-pulse" 
+                        />
+                        {/* Solid coordinate core point */}
+                        <circle 
+                          cx={locX} 
+                          cy={locY} 
+                          r={isTargeted ? 4.5 : 3.2} 
+                          fill={pointColor} 
+                          stroke="#ffffff" 
+                          strokeWidth="1" 
+                          filter={isTargeted ? "url(#neonAttackGlow)" : ""}
+                        />
+
+                        {/* Projection vertical scanner coordinate track */}
+                        {isTargeted && (
+                          <g className="opacity-70 pointer-events-none">
+                            <line x1={locX} y1={locY} x2={locX} y2={locY + 20} stroke={pointColor} strokeWidth="0.8" />
+                            <circle cx={locX} cy={locY + 20} r="1.5" fill={pointColor} />
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Dynamic Interactive Node Details Tooltip Overlay */}
+              {(hoveredNode || selectedNode) && (
+                <div className="absolute top-4 right-4 bg-[#14061a]/95 border border-[#a855f7]/40 p-3.5 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.3)] min-w-[240px] font-mono text-xs text-purple-100 z-50 backdrop-blur-md">
+                  <div className="flex items-center justify-between border-b border-[#a855f7]/30 pb-2 mb-2">
+                    <span className={`font-semibold tracking-wider flex items-center gap-1.5 ${
+                      (hoveredNode || selectedNode)?.isMalicious ? 'text-rose-400' : 'text-cyan-400'
+                    }`}>
+                      <span className="w-2 h-2 rounded-full bg-current animate-ping"></span>
+                      {(hoveredNode || selectedNode)?.isMalicious ? 'ATTENTION: INTRUSION ACTIVE' : 'LIAISON SÉCURISÉE'}
+                    </span>
+                    <button onClick={() => setSelectedNode(null)} className="text-purple-300/60 hover:text-white transition-colors cursor-pointer font-bold">✕</button>
+                  </div>
+                  <div className="space-y-1 text-[10.5px] leading-relaxed text-purple-200/90">
+                    <p><strong className="text-purple-300/40">Adresse IP :</strong> {(hoveredNode || selectedNode)?.ip}</p>
+                    <p><strong className="text-purple-300/40">Localisation :</strong> {(hoveredNode || selectedNode)?.country}</p>
+                    <p><strong className="text-purple-300/40">Volumétrie Log :</strong> {(hoveredNode || selectedNode)?.count.toLocaleString()} requêtes</p>
+                    <p className="pt-2 border-t border-[#a855f7]/15 mt-1.5 flex items-center justify-between">
+                      <strong className="text-purple-300/40">Statut CNDP Maroc:</strong>
+                      {(hoveredNode || selectedNode)?.isMalicious ? (
+                        <span className="text-red-400 text-[9px] font-bold bg-red-950/40 border border-red-500/20 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                          IP BLACKLISTÉE
+                        </span>
+                      ) : (
+                        <span className="text-emerald-400 text-[9px] font-bold bg-emerald-950/40 border border-emerald-500/20 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                          FILTRÉ RGPD OK
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Norse Real-time Side HUD Attack statistics Panel (Col-span 3) */}
+            <div className="col-span-12 lg:col-span-3 flex flex-col bg-[#0e0413] border-t lg:border-t-0 border-[#a855f7]/10 divide-y divide-[#a855f7]/10 select-none">
+              
+              {/* Box 1: Sources / Leaderboard with tiny country flags representation */}
+              <div className="p-4 flex flex-col flex-1 min-h-[160px]">
+                <div className="flex items-center gap-1 text-[10px] text-[#ebd5ff] tracking-widest font-bold uppercase mb-3.5">
+                  <Globe className="w-3.5 h-3.5 text-rose-400" />
+                  <span>ORIGINES AGRESSIONS CRITIQUÉS</span>
+                </div>
+                <div className="space-y-2.5 flex-1 overflow-visible">
+                  {attackerLeaderboard.map((item, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-mono leading-none">
+                        <span className="flex items-center gap-2">
+                          <span className="text-purple-300/40 text-[9px] w-3 font-semibold">#{idx+1}</span>
+                          <span className="font-bold text-slate-300">{item.country}</span>
+                          <span className="text-[8px] bg-[#1d0a23] text-purple-300 border border-[#a855f7]/30 px-1 rounded uppercase font-semibold">{item.code}</span>
+                        </span>
+                        <span className={`font-bold font-mono ${item.color} tracking-wider`}>{item.count.toLocaleString()}</span>
+                      </div>
+                      {/* Interactive dynamic visual progress bar */}
+                      <div className="w-full h-1 bg-[#180a22] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-purple-800 to-rose-600 transition-all duration-1000" 
+                          style={{ width: `${Math.min(100, (item.count / attackerLeaderboard[0].count) * 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Box 2: Target Protocols / Ports */}
+              <div className="p-4 flex flex-col flex-1 min-h-[160px]">
+                <div className="flex items-center gap-1 text-[10px] text-[#ebd5ff] tracking-widest font-bold uppercase mb-3.5">
+                  <Server className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>PORT/PROTOCOLE CIBLE (TCP)</span>
+                </div>
+                <div className="space-y-2.5 flex-1">
+                  {targetPorts.map((item, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-mono leading-none">
+                        <span className="flex items-center gap-1">
+                          <span className="text-[#a855f7] font-semibold tracking-wider font-display shrink-0 w-8">P.{item.port}</span>
+                          <span className="text-zinc-400 text-[9.5px] truncate max-w-[120px]">{item.name}</span>
+                        </span>
+                        <span className="text-[#ebd5ff] font-bold text-[9.5px]">{item.count.toLocaleString()} req</span>
+                      </div>
+                      {/* Cyan progress bar matching Kaspersky HUDs */}
+                      <div className="w-full h-1 bg-[#180a22] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-[#06b6d4] transition-all duration-700" 
+                          style={{ width: `${item.pct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Box 3: Automated Actions Counters */}
+              <div className="p-4 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-[10px] text-[#ebd5ff] tracking-widest font-bold uppercase mb-3 text-purple-200">
+                  <Activity className="w-3.5 h-3.5 text-[#39ff14] animate-pulse" />
+                  <span>FONCTIONS SECURITE SEC-IA</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                  <div className="bg-[#14061a] border border-[#a855f7]/25 p-2 rounded-lg text-center">
+                    <span className="text-purple-300/40 text-[8px] block uppercase truncate mb-0.5">Pare-feu (NSG)</span>
+                    <strong className="text-[#39ff14] text-xs font-semibold">{secIaActions.nsgBlocks}</strong>
+                  </div>
+                  <div className="bg-[#14061a] border border-[#a855f7]/25 p-2 rounded-lg text-center">
+                    <span className="text-purple-300/40 text-[8px] block uppercase truncate mb-0.5">Azure WAF</span>
+                    <strong className="text-cyan-400 text-xs font-semibold">{secIaActions.azureWafBlocks}</strong>
+                  </div>
+                  <div className="bg-[#14061a] border border-[#a855f7]/25 p-2 rounded-lg text-center">
+                    <span className="text-purple-300/40 text-[8px] block uppercase truncate mb-0.5">SMTP Dispatched</span>
+                    <strong className="text-amber-400 text-xs font-semibold">{secIaActions.smtpAlerts}</strong>
+                  </div>
+                  <div className="bg-[#14061a] border border-[#a855f7]/25 p-2 rounded-lg text-center">
+                    <span className="text-purple-300/40 text-[8px] block uppercase truncate mb-0.5">Gemini Audits</span>
+                    <strong className="text-purple-300 text-xs font-semibold">{secIaActions.geminiAudits}</strong>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Embedded CSS for keyframes radar sweeps to render independently of bundler limitations */}
+      {/* 3. Bottom Layer: SIEM Active Cyber-threat Log Ticker Bar */}
+      <div className="h-32 bg-[#0a030d] border-t border-[#a855f7]/20 p-3 font-mono flex flex-col justify-end relative z-10">
+        <div className="flex items-center gap-1.5 text-[9px] text-[#c084fc] mb-2 font-bold uppercase tracking-wider select-none border-b border-[#a855f7]/10 pb-1.5">
+          <Terminal className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+          <span>SOC SIEM INTRUSION FEED STATUS : ACTIVE_MONITORING_DAEMON</span>
+          <span className="ml-auto flex items-center gap-1 text-[8.5px] bg-red-950/40 text-[#f43f5e] px-2 py-0.5 rounded border border-red-500/20 uppercase tracking-widest font-bold">
+            {activeLocations.length} sources surveillées en temps réel
+          </span>
+        </div>
+
+        <div 
+          ref={tickerContainerRef}
+          className="flex-1 overflow-y-auto text-[9px] text-[#ebd5ff]/80 space-y-1.5 scrollbar-thin scrollbar-thumb-[#1e0728] pr-2 leading-relaxed"
+        >
+          {trafficTicker.length === 0 ? (
+            <p className="text-purple-300/40 select-none">{"[DAEMON]"} Établissement de la liaison réseau sécurisée... Flux inactif en attente d'événements.</p>
+          ) : (
+            trafficTicker.map((tick, i) => {
+              // Format colors elegantly for terminal inspection
+              const isBlocked = tick.includes('[BLOQUÉ]');
+              const formattedLine = tick
+                .replace('[BLOQUÉ]', '[-] BLOQUÉ')
+                .replace('[PASS]', '[+] AUTORISE INITIATED');
+
+              return (
+                <p key={i} className="font-mono text-[9.5px] border-l-2 border-[#a855f7]/30 pl-2 select-text leading-none flex items-center gap-1.5">
+                  <span className="text-purple-400/40 select-none">#</span>
+                  <span className={isBlocked ? 'text-rose-400 font-semibold' : 'text-cyan-400 font-semibold'}>
+                    {formattedLine.split(" IP ")[0]}
+                  </span>
+                  <span className="text-zinc-300">
+                    {formattedLine.includes(" IP ") ? `IP ${formattedLine.split(" IP ")[1]}` : formattedLine}
+                  </span>
+                </p>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* CSS Keyframes injected here for the radial sweep and vectors trajectories */}
       <style>{`
-        @keyframes sweep {
+        @keyframes radarLineSweep {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        .radar-sweep-line {
+        .radar-laser-sweep {
           transform-origin: 384.2px 129.3px;
-          animation: sweep 12s linear infinite;
+          animation: radarLineSweep 14s linear infinite;
         }
       `}</style>
 
