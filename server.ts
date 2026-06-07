@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json());
 
@@ -1026,9 +1026,14 @@ Nous observons une attaque par dictionnaire initiée depuis l'IP **185.220.101.1
 
 
 // Serve static Vite files in production
-if (process.env.NODE_ENV !== 'production') {
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.WEBSITE_HOSTNAME;
+
+if (!isProduction) {
   const vite = await createViteServer({
-    server: { middlewareMode: true },
+    server: { 
+      middlewareMode: true,
+      allowedHosts: true as const 
+    },
     appType: 'spa'
   });
   app.use(vite.middlewares);
